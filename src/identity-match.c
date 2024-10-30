@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define INITIAL_NODE_CAPACITY 100
+#define INITIAL_NODE_CAPACITY 1024
 
 // Function to check if a node is already in the array of unique nodes
 int node_exists(int *nodes, int num_nodes, int node) {
