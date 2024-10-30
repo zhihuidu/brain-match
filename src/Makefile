@@ -7,7 +7,7 @@ LAPACK_INCLUDE_DIR ?=  /project/bader/bader/lapack-3.12.0/build/include/
 LAPACK_LIB_DIR ?= /project/bader/bader/lapack-3.12.0/build/lib/
 
 # Linker flags for LAPACK, BLAS, and math libraries
-LDFLAGS = -L$(LAPACK_LIB_DIR) -llapacke -llapack -lgfortran -lblas -lm
+LDFLAGS = -L$(LAPACK_LIB_DIR) -llapack -lblas -lgfortran -lm
 INCLUDE_FLAGS = -I$(LAPACK_INCLUDE_DIR)
 
 # Targets for each executable
