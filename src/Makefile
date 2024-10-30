@@ -37,7 +37,7 @@ spectral-match: $(SPECTRAL_MATCH_SRCS)
 
 # Build refine-matching-hillclimb
 refine-matching-hillclimb: $(REFINE_MATCH_HILLCLIMB_SRCS)
-	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ -lm
 
 # Clean up build files
 clean:
