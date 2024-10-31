@@ -11,12 +11,13 @@ LDFLAGS = -L$(LAPACK_LIB_DIR) -llapack -lblas -lgfortran -lm
 INCLUDE_FLAGS = -I$(LAPACK_INCLUDE_DIR)
 
 # Targets for each executable
-TARGETS = score-matching identity-match spectral-match refine-matching-hillclimb
+TARGETS = score-matching identity-match spectral-match greedy-match refine-matching-hillclimb
 
 # Source files for each program
 SCORE_MATCHING_SRCS = score-matching.c
 IDENTITY_MATCH_SRCS = identity-match.c
 SPECTRAL_MATCH_SRCS = spectral-match.c
+GREEDY_MATCH_SRCS   = greedy-match.c
 REFINE_MATCH_HILLCLIMB_SRCS = refine-matching-hillclimb.c
 
 
@@ -34,6 +35,10 @@ identity-match: $(IDENTITY_MATCH_SRCS)
 # Build spectral-match with LAPACK and BLAS
 spectral-match: $(SPECTRAL_MATCH_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build Greedy match
+greedy-match: $(GREEDY_MATCH_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^
 
 # Build refine-matching-hillclimb
 refine-matching-hillclimb: $(REFINE_MATCH_HILLCLIMB_SRCS)
