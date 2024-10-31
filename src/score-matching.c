@@ -477,81 +477,44 @@ int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t m
 }
 
 int calculate_score_sparse(const Graph* g1, const Graph* g2, const int* matching) {
-    print_timestamp("Calculating matching score");
+    print_timestamp("Calculating matching alignment score");
     
     if (!g1 || !g2 || !matching) return -1;
     
-    int score = 0;
+    int alignment_score = 0;
     size_t processed_edges = 0;
-    size_t total_edges = g1->num_edges + g2->num_edges;
+    size_t total_edges = g1->num_edges; // Only process g1 edges
     
-    // Process edges from g1
+    // Process edges from g1 only (equivalent to male_edges in Python)
     for (size_t i = 0; i < g1->num_vertices; i++) {
         EdgeNode* edge1 = g1->adjacency_lists[i];
         while (edge1) {
             processed_edges++;
             if (processed_edges % PROGRESS_INTERVAL == 0) {
-                print_progress(processed_edges, total_edges, "Computing score");
+                print_progress(processed_edges, total_edges, "Computing alignment");
             }
             
             int source_g2 = matching[i];
             int target_g2 = matching[edge1->target];
             
             if (source_g2 != -1 && target_g2 != -1) {
+                // Find corresponding edge in g2 (female_edges in Python)
                 EdgeNode* edge2 = find_edge(g2, source_g2, target_g2);
+                
                 if (edge2) {
-                    score += abs(edge1->weight - edge2->weight);
-                } else {
-                    score += edge1->weight;
+                    // Take minimum of the two edge weights
+                    alignment_score += (edge1->weight < edge2->weight) ? 
+                                     edge1->weight : edge2->weight;
                 }
-            } else {
-                score += edge1->weight;
+                // If edge doesn't exist in g2, contribute 0 (implicit in Python's .get())
             }
             
             edge1 = edge1->next;
         }
     }
     
-    // Process unmatched edges from g2
-    for (size_t i = 0; i < g2->num_vertices; i++) {
-        EdgeNode* edge2 = g2->adjacency_lists[i];
-        while (edge2) {
-            processed_edges++;
-            if (processed_edges % PROGRESS_INTERVAL == 0) {
-                print_progress(processed_edges, total_edges, "Computing score");
-            }
-            
-            int source_g1 = -1;
-            for (size_t j = 0; j < g1->num_vertices; j++) {
-                if (matching[j] == (int)i) {
-                    source_g1 = j;
-                    break;
-                }
-            }
-            
-            if (source_g1 != -1) {
-                EdgeNode* edge1 = g1->adjacency_lists[source_g1];
-                int found = 0;
-                while (edge1) {
-                    if (matching[edge1->target] == edge2->target) {
-                        found = 1;
-                        break;
-                    }
-                    edge1 = edge1->next;
-                }
-                if (!found) {
-                    score += edge2->weight;
-                }
-            } else {
-                score += edge2->weight;
-            }
-            
-            edge2 = edge2->next;
-        }
-    }
-    
-    print_timestamp("Score calculation complete");
-    return score;
+    print_timestamp("Alignment score calculation complete");
+    return alignment_score;
 }
 
 int main(int argc, char* argv[]) {
