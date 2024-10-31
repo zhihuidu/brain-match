@@ -5,6 +5,7 @@ This contains several helper programs as well:
 
 **transform-connectome-graph**: Convert the VNC Connectome male and female graphs into generic graphs \
 **transform-solution**: Convert a solution matching into a VNC Connectome male and female solution file \
+**convert-VNC-matching**: Convert the VNC Connectome matching solution into a generic one \
 **score-matching**: Find the score of a matching between two graphs \
 **identity-match**: Given one graph, create a matching (i,i) for each vertex \
 **spectral-match**: Given two graphs, use spectral methods to find a matching \
