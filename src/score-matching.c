@@ -3,6 +3,7 @@
 #include <string.h>
 #include <errno.h>
 #include <limits.h>
+#include <time.h>
 
 // Error codes
 #define SUCCESS 0
@@ -10,337 +11,652 @@
 #define ERROR_MEMORY_ALLOC -2
 #define ERROR_INVALID_INPUT -3
 
-typedef struct {
-    int source;
+// Initial sizes and thresholds
+#define INITIAL_HASH_SIZE 1024
+#define INITIAL_GRAPH_SIZE 1024
+#define LOAD_FACTOR_THRESHOLD 0.7
+#define PROGRESS_INTERVAL 10000
+
+// Forward declarations of all structures
+typedef struct EdgeNode EdgeNode;
+typedef struct Graph Graph;
+typedef struct HashNode HashNode;
+typedef struct HashMap HashMap;
+typedef struct VertexMap VertexMap;
+
+// Structure definitions
+struct EdgeNode {
     int target;
     int weight;
-} Edge;
+    struct EdgeNode* next;
+};
 
-typedef struct {
+struct Graph {
+    EdgeNode** adjacency_lists;
+    size_t num_vertices;
     size_t num_edges;
-    size_t capacity;
-    Edge *edges;
-} Graph;
+};
 
-typedef struct {
-    int *node_ids;
+struct HashNode {
+    int key;
+    int value;
+    struct HashNode* next;
+};
+
+struct HashMap {
+    HashNode** buckets;
+    size_t size;
+    size_t count;
+};
+
+struct VertexMap {
+    HashMap* id_to_index;
+    int* index_to_id;
     size_t count;
     size_t capacity;
-} NodeMap;
+};
 
-// Function prototypes with error handling
-int binary_search(const int *array, size_t size, int value);
-NodeMap *create_node_map(size_t initial_capacity);
-void free_node_map(NodeMap *map);
-int add_node_id(NodeMap *map, int node_id);
-Graph *create_graph(size_t initial_capacity);
-void free_graph(Graph *graph);
-int count_graph_edges(const char *filename, NodeMap *map, size_t *num_edges);
-int load_graph(const char *filename, Graph *graph, NodeMap *map);
-int *create_matching(const NodeMap *map);
-int load_matching(const char *filename, NodeMap *map, int *matching);
-int calculate_score(const Graph *g1, Graph *g2, const int *matching);
+// Function prototypes
+void print_timestamp(const char* message);
+void print_progress(size_t current, size_t total, const char* task);
+void print_memory_usage(const Graph* g1, const Graph* g2, const VertexMap* vmap, const char* stage);
 
-// Improved binary search implementation
-int binary_search(const int *array, size_t size, int value) {
-    if (!array || size == 0) return -1;
-    
-    size_t low = 0;
-    size_t high = size - 1;
-    
-    while (low <= high) {
-        size_t mid = low + (high - low) / 2;  // Prevents potential overflow
-        if (array[mid] == value) return (int)mid;
-        if (array[mid] < value) low = mid + 1;
-        else high = mid - 1;
-    }
-    return -1;
+unsigned int hash_function(int key);
+HashMap* create_hashmap(size_t initial_size);
+void free_hashmap(HashMap* map);
+int resize_hashmap(HashMap* map);
+int hashmap_put(HashMap* map, int key, int value);
+int hashmap_get(const HashMap* map, int key, int* value);
+
+VertexMap* create_vertex_map(size_t initial_capacity);
+void free_vertex_map(VertexMap* vmap);
+int get_or_create_vertex_index(VertexMap* vmap, int original_id);
+int get_original_id(const VertexMap* vmap, int index);
+
+Graph* create_graph(size_t initial_vertices);
+void free_graph(Graph* graph);
+int add_edge(Graph* graph, int source, int target, int weight);
+EdgeNode* find_edge(const Graph* graph, int source, int target);
+int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap);
+int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t matching_size);
+int calculate_score_sparse(const Graph* g1, const Graph* g2, const int* matching);
+
+// Progress reporting functions
+void print_timestamp(const char* message) {
+    time_t now;
+    time(&now);
+    char* time_str = ctime(&now);
+    time_str[strlen(time_str) - 1] = '\0';
+    fprintf(stderr, "[%s] %s\n", time_str, message);
 }
 
-// Improved NodeMap creation with error checking
-NodeMap *create_node_map(size_t initial_capacity) {
-    NodeMap *map = malloc(sizeof(NodeMap));
+void print_progress(size_t current, size_t total, const char* task) {
+    if (total == 0) return;
+    float percentage = (float)current * 100 / total;
+    fprintf(stderr, "\r%s: %.1f%% (%zu/%zu)", task, percentage, current, total);
+    if (current == total) fprintf(stderr, "\n");
+    fflush(stderr);
+}
+
+void print_memory_usage(const Graph* g1, const Graph* g2, const VertexMap* vmap, const char* stage) {
+    fprintf(stderr, "\nMemory usage after %s:\n", stage);
+    fprintf(stderr, "  Graph 1: %zu vertices, %zu edges\n", 
+            g1 ? g1->num_vertices : 0, g1 ? g1->num_edges : 0);
+    fprintf(stderr, "  Graph 2: %zu vertices, %zu edges\n", 
+            g2 ? g2->num_vertices : 0, g2 ? g2->num_edges : 0);
+    fprintf(stderr, "  Vertex map: %zu vertices mapped\n\n", 
+            vmap ? vmap->count : 0);
+}
+
+// Hash function implementation
+unsigned int hash_function(int key) {
+    unsigned int hash = 0;
+    unsigned char* bytes = (unsigned char*)&key;
+    
+    for(size_t i = 0; i < sizeof(int); ++i) {
+        hash += bytes[i];
+        hash += (hash << 10);
+        hash ^= (hash >> 6);
+    }
+    
+    hash += (hash << 3);
+    hash ^= (hash >> 11);
+    hash += (hash << 15);
+    
+    return hash;
+}
+
+// HashMap implementations
+HashMap* create_hashmap(size_t initial_size) {
+    HashMap* map = calloc(1, sizeof(HashMap));
     if (!map) return NULL;
     
-    map->node_ids = malloc(initial_capacity * sizeof(int));
-    if (!map->node_ids) {
+    map->size = initial_size;
+    map->buckets = calloc(initial_size, sizeof(HashNode*));
+    if (!map->buckets) {
         free(map);
         return NULL;
     }
     
-    map->count = 0;
-    map->capacity = initial_capacity;
     return map;
 }
 
-void free_node_map(NodeMap *map) {
-    if (map) {
-        free(map->node_ids);
-        free(map);
+void free_hashmap(HashMap* map) {
+    if (!map) return;
+    
+    for (size_t i = 0; i < map->size; i++) {
+        HashNode* current = map->buckets[i];
+        while (current) {
+            HashNode* next = current->next;
+            free(current);
+            current = next;
+        }
     }
+    
+    free(map->buckets);
+    free(map);
 }
 
-// Improved node addition with bounds checking
-int add_node_id(NodeMap *map, int node_id) {
+int resize_hashmap(HashMap* map) {
+    size_t new_size = map->size * 2;
+    HashNode** new_buckets = calloc(new_size, sizeof(HashNode*));
+    if (!new_buckets) return ERROR_MEMORY_ALLOC;
+    
+    for (size_t i = 0; i < map->size; i++) {
+        HashNode* current = map->buckets[i];
+        while (current) {
+            HashNode* next = current->next;
+            unsigned int index = hash_function(current->key) & (new_size - 1);
+            current->next = new_buckets[index];
+            new_buckets[index] = current;
+            current = next;
+        }
+    }
+    
+    free(map->buckets);
+    map->buckets = new_buckets;
+    map->size = new_size;
+    
+    return SUCCESS;
+}
+
+int hashmap_put(HashMap* map, int key, int value) {
     if (!map) return ERROR_INVALID_INPUT;
     
-    int idx = binary_search(map->node_ids, map->count, node_id);
-    if (idx != -1) return idx;
-    
-    if (map->count >= map->capacity) {
-        size_t new_capacity = map->capacity * 2;
-        int *new_ids = realloc(map->node_ids, new_capacity * sizeof(int));
-        if (!new_ids) return ERROR_MEMORY_ALLOC;
-        
-        map->node_ids = new_ids;
-        map->capacity = new_capacity;
+    if ((float)map->count / map->size >= LOAD_FACTOR_THRESHOLD) {
+        if (resize_hashmap(map) != SUCCESS) return ERROR_MEMORY_ALLOC;
     }
     
-    size_t pos = map->count;
-    while (pos > 0 && map->node_ids[pos - 1] > node_id) {
-        map->node_ids[pos] = map->node_ids[pos - 1];
-        pos--;
+    unsigned int index = hash_function(key) & (map->size - 1);
+    
+    HashNode* current = map->buckets[index];
+    while (current) {
+        if (current->key == key) {
+            current->value = value;
+            return SUCCESS;
+        }
+        current = current->next;
     }
     
-    map->node_ids[pos] = node_id;
+    HashNode* node = malloc(sizeof(HashNode));
+    if (!node) return ERROR_MEMORY_ALLOC;
+    
+    node->key = key;
+    node->value = value;
+    node->next = map->buckets[index];
+    map->buckets[index] = node;
     map->count++;
-    return (int)pos;
+    
+    return SUCCESS;
 }
 
-// New Graph creation function
-Graph *create_graph(size_t initial_capacity) {
-    Graph *graph = malloc(sizeof(Graph));
+int hashmap_get(const HashMap* map, int key, int* value) {
+    if (!map || !value) return ERROR_INVALID_INPUT;
+    
+    unsigned int index = hash_function(key) & (map->size - 1);
+    HashNode* current = map->buckets[index];
+    
+    while (current) {
+        if (current->key == key) {
+            *value = current->value;
+            return SUCCESS;
+        }
+        current = current->next;
+    }
+    
+    return ERROR_INVALID_INPUT;
+}
+
+// VertexMap implementations
+VertexMap* create_vertex_map(size_t initial_capacity) {
+    VertexMap* vmap = calloc(1, sizeof(VertexMap));
+    if (!vmap) return NULL;
+    
+    vmap->id_to_index = create_hashmap(initial_capacity);
+    if (!vmap->id_to_index) {
+        free(vmap);
+        return NULL;
+    }
+    
+    vmap->index_to_id = malloc(initial_capacity * sizeof(int));
+    if (!vmap->index_to_id) {
+        free_hashmap(vmap->id_to_index);
+        free(vmap);
+        return NULL;
+    }
+    
+    vmap->capacity = initial_capacity;
+    vmap->count = 0;
+    return vmap;
+}
+
+void free_vertex_map(VertexMap* vmap) {
+    if (vmap) {
+        free_hashmap(vmap->id_to_index);
+        free(vmap->index_to_id);
+        free(vmap);
+    }
+}
+
+int get_or_create_vertex_index(VertexMap* vmap, int original_id) {
+    if (!vmap) return -1;
+    
+    int index;
+    if (hashmap_get(vmap->id_to_index, original_id, &index) == SUCCESS) {
+        return index;
+    }
+    
+    if (vmap->count >= vmap->capacity) {
+        size_t new_capacity = vmap->capacity * 2;
+        int* new_array = realloc(vmap->index_to_id, new_capacity * sizeof(int));
+        if (!new_array) return -1;
+        
+        vmap->index_to_id = new_array;
+        vmap->capacity = new_capacity;
+    }
+    
+    index = vmap->count;
+    if (hashmap_put(vmap->id_to_index, original_id, index) != SUCCESS) {
+        return -1;
+    }
+    
+    vmap->index_to_id[index] = original_id;
+    vmap->count++;
+    return index;
+}
+
+int get_original_id(const VertexMap* vmap, int index) {
+    if (!vmap || index < 0 || index >= vmap->count) return -1;
+    return vmap->index_to_id[index];
+}
+
+// Graph implementations
+Graph* create_graph(size_t initial_vertices) {
+    Graph* graph = calloc(1, sizeof(Graph));
     if (!graph) return NULL;
     
-    graph->edges = malloc(initial_capacity * sizeof(Edge));
-    if (!graph->edges) {
+    graph->adjacency_lists = calloc(initial_vertices, sizeof(EdgeNode*));
+    if (!graph->adjacency_lists) {
         free(graph);
         return NULL;
     }
     
+    graph->num_vertices = initial_vertices;
     graph->num_edges = 0;
-    graph->capacity = initial_capacity;
     return graph;
 }
 
-void free_graph(Graph *graph) {
-    if (graph) {
-        free(graph->edges);
-        free(graph);
+void free_graph(Graph* graph) {
+    if (!graph) return;
+    
+    for (size_t i = 0; i < graph->num_vertices; i++) {
+        EdgeNode* current = graph->adjacency_lists[i];
+        while (current) {
+            EdgeNode* next = current->next;
+            free(current);
+            current = next;
+        }
     }
+    
+    free(graph->adjacency_lists);
+    free(graph);
 }
 
-// Improved graph edge counting with better error handling
-int count_graph_edges(const char *filename, NodeMap *map, size_t *num_edges) {
-    FILE *file = fopen(filename, "r");
+EdgeNode* find_edge(const Graph* graph, int source, int target) {
+    if (!graph || source >= graph->num_vertices) return NULL;
+    
+    EdgeNode* current = graph->adjacency_lists[source];
+    while (current) {
+        if (current->target == target) return current;
+        current = current->next;
+    }
+    
+    return NULL;
+}
+
+int add_edge(Graph* graph, int source, int target, int weight) {
+    if (!graph || source >= graph->num_vertices || target >= graph->num_vertices) 
+        return ERROR_INVALID_INPUT;
+    
+    EdgeNode* existing = find_edge(graph, source, target);
+    if (existing) {
+        existing->weight = weight;
+        return SUCCESS;
+    }
+    
+    EdgeNode* edge = malloc(sizeof(EdgeNode));
+    if (!edge) return ERROR_MEMORY_ALLOC;
+    
+    edge->target = target;
+    edge->weight = weight;
+    edge->next = graph->adjacency_lists[source];
+    graph->adjacency_lists[source] = edge;
+    graph->num_edges++;
+    
+    return SUCCESS;
+}
+
+int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
+    print_timestamp("Loading graph");
+    fprintf(stderr, "Reading from file: %s\n", filename);
+    
+    FILE* file = fopen(filename, "r");
     if (!file) return ERROR_FILE_OPEN;
     
-    *num_edges = 0;
-    char line[256];
-    int src, tgt, weight;
+    char line[1024];
+    size_t line_count = 0;
+    size_t edge_count = 0;
     
-    // Skip header
+    while (fgets(line, sizeof(line), file)) line_count++;
+    rewind(file);
+    
+    fprintf(stderr, "Found %zu lines in file\n", line_count);
+    
     if (!fgets(line, sizeof(line), file)) {
         fclose(file);
         return ERROR_INVALID_INPUT;
     }
+    line_count--;
     
+    size_t processed = 0;
     while (fgets(line, sizeof(line), file)) {
-        if (sscanf(line, "%d,%d,%d", &src, &tgt, &weight) == 3) {
-            if (add_node_id(map, src) < 0 || add_node_id(map, tgt) < 0) {
+        processed++;
+        if (processed % PROGRESS_INTERVAL == 0) {
+            print_progress(processed, line_count, "Loading graph edges");
+        }
+        
+        int src, tgt, weight;
+        if (sscanf(line, "%d,%d,%d", &src, &tgt, &weight) != 3) continue;
+        
+        int src_idx = get_or_create_vertex_index(vmap, src);
+        int tgt_idx = get_or_create_vertex_index(vmap, tgt);
+        
+        if (src_idx < 0 || tgt_idx < 0) {
+            fclose(file);
+            return ERROR_MEMORY_ALLOC;
+        }
+        
+        if (src_idx >= graph->num_vertices || tgt_idx >= graph->num_vertices) {
+            size_t new_size = (src_idx > tgt_idx ? src_idx : tgt_idx) + 1;
+            EdgeNode** new_lists = realloc(graph->adjacency_lists, 
+                                         new_size * sizeof(EdgeNode*));
+            if (!new_lists) {
                 fclose(file);
                 return ERROR_MEMORY_ALLOC;
             }
-            (*num_edges)++;
-        }
-    }
-    
-    fclose(file);
-    return SUCCESS;
-}
-
-// Improved graph loading with better error handling
-int load_graph(const char *filename, Graph *graph, NodeMap *map) {
-    FILE *file = fopen(filename, "r");
-    if (!file) return ERROR_FILE_OPEN;
-    
-    char line[256];
-    // Skip header
-    if (!fgets(line, sizeof(line), file)) {
-        fclose(file);
-        return ERROR_INVALID_INPUT;
-    }
-    
-    while (fgets(line, sizeof(line), file) && graph->num_edges < graph->capacity) {
-        int src, tgt, weight;
-        if (sscanf(line, "%d,%d,%d", &src, &tgt, &weight) == 3) {
-            int src_idx = binary_search(map->node_ids, map->count, src);
-            int tgt_idx = binary_search(map->node_ids, map->count, tgt);
             
-            if (src_idx != -1 && tgt_idx != -1) {
-                graph->edges[graph->num_edges].source = src_idx;
-                graph->edges[graph->num_edges].target = tgt_idx;
-                graph->edges[graph->num_edges].weight = weight;
-                graph->num_edges++;
+            for (size_t i = graph->num_vertices; i < new_size; i++) {
+                new_lists[i] = NULL;
             }
+            
+            graph->adjacency_lists = new_lists;
+            graph->num_vertices = new_size;
+        }
+        
+        if (add_edge(graph, src_idx, tgt_idx, weight) == SUCCESS) {
+            edge_count++;
         }
     }
     
     fclose(file);
+    fprintf(stderr, "\nSuccessfully loaded %zu edges\n", edge_count);
     return SUCCESS;
 }
 
-// New matching creation function
-int *create_matching(const NodeMap *map) {
-    if (!map) return NULL;
+int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t matching_size) {
+    print_timestamp("Loading matching");
+    fprintf(stderr, "Reading matching from file: %s\n", filename);
     
-    int *matching = malloc(map->count * sizeof(int));
-    if (matching) {
-        for (size_t i = 0; i < map->count; i++) {
-            matching[i] = -1;
-        }
-    }
-    return matching;
-}
-
-// Improved matching loading with better error handling
-int load_matching(const char *filename, NodeMap *map, int *matching) {
-    FILE *file = fopen(filename, "r");
+    FILE* file = fopen(filename, "r");
     if (!file) return ERROR_FILE_OPEN;
     
-    char line[256];
+    // Initialize matching array
+    for (size_t i = 0; i < matching_size; i++) {
+        matching[i] = -1;
+    }
+    
+    char line[1024];
+    size_t line_count = 0;
+    size_t matches = 0;
+    
+    // Count lines for progress reporting
+    while (fgets(line, sizeof(line), file)) line_count++;
+    rewind(file);
+    
+    fprintf(stderr, "Found %zu lines in matching file\n", line_count);
+    
     // Skip header
     if (!fgets(line, sizeof(line), file)) {
         fclose(file);
         return ERROR_INVALID_INPUT;
     }
+    line_count--;
     
+    size_t processed = 0;
     while (fgets(line, sizeof(line), file)) {
-        int node_g1, node_g2;
-        if (sscanf(line, "%d,%d", &node_g1, &node_g2) == 2) {
-            int idx_g1 = binary_search(map->node_ids, map->count, node_g1);
-            int idx_g2 = binary_search(map->node_ids, map->count, node_g2);
-            if (idx_g1 != -1 && idx_g2 != -1) {
-                matching[idx_g1] = idx_g2;
-            }
+        processed++;
+        if (processed % PROGRESS_INTERVAL == 0) {
+            print_progress(processed, line_count, "Loading matches");
+        }
+        
+        int id1, id2;
+        if (sscanf(line, "%d,%d", &id1, &id2) != 2) continue;
+        
+        int idx1 = get_or_create_vertex_index(vmap, id1);
+        int idx2 = get_or_create_vertex_index(vmap, id2);
+        
+        if (idx1 >= 0 && idx2 >= 0 && idx1 < matching_size) {
+            matching[idx1] = idx2;
+            matches++;
         }
     }
     
     fclose(file);
+    fprintf(stderr, "\nSuccessfully loaded %zu matches\n", matches);
     return SUCCESS;
 }
 
-// Improved score calculation
-int calculate_score(const Graph *g1, Graph *g2, const int *matching) {
+int calculate_score_sparse(const Graph* g1, const Graph* g2, const int* matching) {
+    print_timestamp("Calculating matching score");
+    
     if (!g1 || !g2 || !matching) return -1;
     
     int score = 0;
+    size_t processed_edges = 0;
+    size_t total_edges = g1->num_edges + g2->num_edges;
     
     // Process edges from g1
-    for (size_t i = 0; i < g1->num_edges; i++) {
-        int source_g1 = g1->edges[i].source;
-        int target_g1 = g1->edges[i].target;
-        int weight_g1 = g1->edges[i].weight;
-        
-        int source_g2 = matching[source_g1];
-        int target_g2 = matching[target_g1];
-        
-        if (source_g2 != -1 && target_g2 != -1) {
-            // Find matching edge in g2
-            int found = 0;
-            for (size_t j = 0; j < g2->num_edges; j++) {
-                if (g2->edges[j].source == source_g2 && g2->edges[j].target == target_g2) {
-                    score += abs(weight_g1 - g2->edges[j].weight);
-                    // Remove the matched edge from g2
-                    g2->edges[j] = g2->edges[--g2->num_edges];
-                    found = 1;
-                    break;
-                }
+    for (size_t i = 0; i < g1->num_vertices; i++) {
+        EdgeNode* edge1 = g1->adjacency_lists[i];
+        while (edge1) {
+            processed_edges++;
+            if (processed_edges % PROGRESS_INTERVAL == 0) {
+                print_progress(processed_edges, total_edges, "Computing score");
             }
-            if (!found) score += weight_g1;
-        } else {
-            score += weight_g1;
+            
+            int source_g2 = matching[i];
+            int target_g2 = matching[edge1->target];
+            
+            if (source_g2 != -1 && target_g2 != -1) {
+                EdgeNode* edge2 = find_edge(g2, source_g2, target_g2);
+                if (edge2) {
+                    score += abs(edge1->weight - edge2->weight);
+                } else {
+                    score += edge1->weight;
+                }
+            } else {
+                score += edge1->weight;
+            }
+            
+            edge1 = edge1->next;
         }
     }
     
-    // Add remaining edges from g2
-    for (size_t i = 0; i < g2->num_edges; i++) {
-        score += g2->edges[i].weight;
+    // Process unmatched edges from g2
+    for (size_t i = 0; i < g2->num_vertices; i++) {
+        EdgeNode* edge2 = g2->adjacency_lists[i];
+        while (edge2) {
+            processed_edges++;
+            if (processed_edges % PROGRESS_INTERVAL == 0) {
+                print_progress(processed_edges, total_edges, "Computing score");
+            }
+            
+            int source_g1 = -1;
+            for (size_t j = 0; j < g1->num_vertices; j++) {
+                if (matching[j] == (int)i) {
+                    source_g1 = j;
+                    break;
+                }
+            }
+            
+            if (source_g1 != -1) {
+                EdgeNode* edge1 = g1->adjacency_lists[source_g1];
+                int found = 0;
+                while (edge1) {
+                    if (matching[edge1->target] == edge2->target) {
+                        found = 1;
+                        break;
+                    }
+                    edge1 = edge1->next;
+                }
+                if (!found) {
+                    score += edge2->weight;
+                }
+            } else {
+                score += edge2->weight;
+            }
+            
+            edge2 = edge2->next;
+        }
     }
     
+    print_timestamp("Score calculation complete");
     return score;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     if (argc != 4) {
         fprintf(stderr, "Usage: %s <g1.csv> <g2.csv> <matching.csv>\n", argv[0]);
         return EXIT_FAILURE;
     }
     
-    const char *g1_filename = argv[1];
-    const char *g2_filename = argv[2];
-    const char *matching_filename = argv[3];
+    print_timestamp("Starting graph matching program");
     
-    // Initialize structures with error handling
-    NodeMap *map = create_node_map(1000);
-    if (!map) {
-        fprintf(stderr, "Failed to create node map\n");
+    const char* g1_filename = argv[1];
+    const char* g2_filename = argv[2];
+    const char* matching_filename = argv[3];
+    
+    // Create vertex mapping
+    VertexMap* vmap = create_vertex_map(INITIAL_HASH_SIZE);
+    if (!vmap) {
+        fprintf(stderr, "Failed to create vertex map\n");
         return EXIT_FAILURE;
     }
     
-    size_t g1_edges, g2_edges;
-    if (count_graph_edges(g1_filename, map, &g1_edges) != SUCCESS) {
-        fprintf(stderr, "Error counting edges in %s\n", g1_filename);
-        free_node_map(map);
-        return EXIT_FAILURE;
-    }
-    
-    Graph *g1 = create_graph(g1_edges);
-    if (!g1 || load_graph(g1_filename, g1, map) != SUCCESS) {
-        fprintf(stderr, "Error loading graph from %s\n", g1_filename);
-        free_node_map(map);
-        free_graph(g1);
-        return EXIT_FAILURE;
-    }
-    
-    if (count_graph_edges(g2_filename, map, &g2_edges) != SUCCESS) {
-        fprintf(stderr, "Error counting edges in %s\n", g2_filename);
-        free_node_map(map);
-        free_graph(g1);
-        return EXIT_FAILURE;
-    }
-    
-    Graph *g2 = create_graph(g2_edges);
-    if (!g2 || load_graph(g2_filename, g2, map) != SUCCESS) {
-        fprintf(stderr, "Error loading graph from %s\n", g2_filename);
-        free_node_map(map);
+    // Create initial empty graphs
+    Graph* g1 = create_graph(INITIAL_GRAPH_SIZE);
+    Graph* g2 = create_graph(INITIAL_GRAPH_SIZE);
+    if (!g1 || !g2) {
+        fprintf(stderr, "Failed to create graphs\n");
+        free_vertex_map(vmap);
         free_graph(g1);
         free_graph(g2);
         return EXIT_FAILURE;
     }
     
-    int *matching = create_matching(map);
-    if (!matching || load_matching(matching_filename, map, matching) != SUCCESS) {
-        fprintf(stderr, "Error loading matching from %s\n", matching_filename);
-        free_node_map(map);
+    // Load first graph
+    print_memory_usage(g1, g2, vmap, "initial creation");
+    int result = load_graph_sparse(g1_filename, g1, vmap);
+    if (result != SUCCESS) {
+        fprintf(stderr, "Failed to load first graph: error %d\n", result);
+        free_vertex_map(vmap);
+        free_graph(g1);
+        free_graph(g2);
+        return EXIT_FAILURE;
+    }
+    
+    print_memory_usage(g1, g2, vmap, "loading first graph");
+    
+    // Load second graph
+    result = load_graph_sparse(g2_filename, g2, vmap);
+    if (result != SUCCESS) {
+        fprintf(stderr, "Failed to load second graph: error %d\n", result);
+        free_vertex_map(vmap);
+        free_graph(g1);
+        free_graph(g2);
+        return EXIT_FAILURE;
+    }
+    
+    print_memory_usage(g1, g2, vmap, "loading second graph");
+    
+    // Create and initialize matching array
+    print_timestamp("Allocating matching array");
+    int* matching = calloc(vmap->count, sizeof(int));
+    if (!matching) {
+        fprintf(stderr, "Failed to allocate matching array\n");
+        free_vertex_map(vmap);
+        free_graph(g1);
+        free_graph(g2);
+        return EXIT_FAILURE;
+    }
+    
+    // Load matching
+    result = load_matching(matching_filename, vmap, matching, vmap->count);
+    if (result != SUCCESS) {
+        fprintf(stderr, "Failed to load matching: error %d\n", result);
+        free_vertex_map(vmap);
         free_graph(g1);
         free_graph(g2);
         free(matching);
         return EXIT_FAILURE;
     }
     
-    int score = calculate_score(g1, g2, matching);
+    print_timestamp("Starting score calculation");
+    fprintf(stderr, "Processing graphs with:\n");
+    fprintf(stderr, "  Graph 1: %zu vertices and %zu edges\n", g1->num_vertices, g1->num_edges);
+    fprintf(stderr, "  Graph 2: %zu vertices and %zu edges\n", g2->num_vertices, g2->num_edges);
+    
+    // Calculate and print score
+    int score = calculate_score_sparse(g1, g2, matching);
     if (score >= 0) {
-        printf("Match score: %d\n", score);
+        print_timestamp("Calculation complete");
+        printf("%d\n", score);
     } else {
         fprintf(stderr, "Error calculating score\n");
+        free_vertex_map(vmap);
+        free_graph(g1);
+        free_graph(g2);
+        free(matching);
+        return EXIT_FAILURE;
     }
     
     // Cleanup
+    print_timestamp("Cleaning up");
+    free_vertex_map(vmap);
     free_graph(g1);
     free_graph(g2);
     free(matching);
-    free_node_map(map);
     
+    print_timestamp("Program completed successfully");
     return EXIT_SUCCESS;
 }
