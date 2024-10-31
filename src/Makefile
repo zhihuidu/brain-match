@@ -11,10 +11,12 @@ LDFLAGS = -L$(LAPACK_LIB_DIR) -llapack -lblas -lgfortran -lm
 INCLUDE_FLAGS = -I$(LAPACK_INCLUDE_DIR)
 
 # Targets for each executable
-TARGETS = transform-connectome-graph score-matching identity-match spectral-match greedy-match refine-matching-hillclimb
+TARGETS = transform-connectome-graph transform-solution \
+	score-matching identity-match spectral-match greedy-match refine-matching-hillclimb
 
 # Source files for each program
 TRANSFORM_GRAPH_SRCS = transform-connectome-graph.c
+TRANSFORM_SOLN_SRCS = transform-solution.c
 SCORE_MATCHING_SRCS = score-matching.c
 IDENTITY_MATCH_SRCS = identity-match.c
 SPECTRAL_MATCH_SRCS = spectral-match.c
@@ -27,6 +29,10 @@ all: $(TARGETS)
 
 # Transform VNC male and female input graphs
 transform-connectome-graph: $(TRANSFORM_GRAPH_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^
+
+# Transform a solution into VNC male and female matching
+transform-solution: $(TRANSFORM_SOLN_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^
 
 # Build score-matching
