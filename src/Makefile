@@ -12,7 +12,8 @@ INCLUDE_FLAGS = -I$(LAPACK_INCLUDE_DIR)
 
 # Targets for each executable
 TARGETS = analyze-graph transform-connectome-graph transform-solution convert-VNC-matching \
-	score-matching identity-match spectral-match greedy-match refine-matching-hillclimb
+	score-matching identity-match spectral-match greedy-match greedy-feature-match \
+	refine-matching-hillclimb
 
 # Source files for each program
 ANALYZE_GRAPH_SRCS  = analyze-graph.c
@@ -23,6 +24,7 @@ SCORE_MATCHING_SRCS = score-matching.c
 IDENTITY_MATCH_SRCS = identity-match.c
 SPECTRAL_MATCH_SRCS = spectral-match.c
 GREEDY_MATCH_SRCS   = greedy-match.c
+GREEDY_FEATURE_MATCH_SRCS   = greedy-feature-match.c
 REFINE_MATCH_HILLCLIMB_SRCS = refine-matching-hillclimb.c
 
 
@@ -60,6 +62,10 @@ spectral-match: $(SPECTRAL_MATCH_SRCS)
 # Build Greedy match
 greedy-match: $(GREEDY_MATCH_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^
+
+# Build Greedy feature match
+greedy-feature-match: $(GREEDY_FEATURE_MATCH_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ -lm
 
 # Build refine-matching-hillclimb
 refine-matching-hillclimb: $(REFINE_MATCH_HILLCLIMB_SRCS)

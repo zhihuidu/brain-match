@@ -11,6 +11,7 @@ This contains several helper programs as well:
 **identity-match**: Given one graph, create a matching (i,i) for each vertex \
 **spectral-match**: Given two graphs, use a spectral method to find a matching \
 **greedy-match**: Given two graphs, use a greedy similarity method to find a matching \
+**greedy-feature-match**: Given two graphs, use a greedy similarity method with extended structural features to find a matching \
 **refine-match-hillclimb**: Given two graphs and matching, use hill-climbing to improve the match
 
 
