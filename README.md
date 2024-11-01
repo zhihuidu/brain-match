@@ -13,14 +13,14 @@ This contains several helper programs as well:
 **refine-match-hillclimb**: Given two graphs and matching, use hill-climbing to improve the match
 
 
-**Sample workflow:** \
+**Sample workflow:** 
 ```
-% gunzip female_connectome_graph.csv.gz \
-% gunzip male_connectome_graph.csv.gz \
-% transform-connectome_graph -f female_connectome_graph.csv \
-% transform-connectome_graph -m male_connectome_graph.csv \
-% greedy-match gm.csv gf.csv matching.csv \
-% score-matching  gm.csv gf.csv matching.csv \
+% gunzip female_connectome_graph.csv.gz
+% gunzip male_connectome_graph.csv.gz
+% transform-connectome_graph -f female_connectome_graph.csv
+% transform-connectome_graph -m male_connectome_graph.csv
+% greedy-match gm.csv gf.csv matching.csv
+% score-matching  gm.csv gf.csv matching.csv
 ```
 
 David A. Bader
