@@ -3,6 +3,7 @@ Match two Connectome brain graphs.
 
 This contains several helper programs as well:
 
+**analyze-graph**: Analyze an input graph \
 **transform-connectome-graph**: Convert the VNC Connectome male and female graphs into generic graphs \
 **transform-solution**: Convert a solution matching into a VNC Connectome male and female solution file \
 **convert-VNC-matching**: Convert the VNC Connectome matching solution into a generic one \
@@ -16,7 +17,9 @@ This contains several helper programs as well:
 **Sample workflow:** 
 ```
 % gunzip female_connectome_graph.csv.gz
+% analyze-graph -v female_connectome_graph.csv
 % gunzip male_connectome_graph.csv.gz
+% analyze-graph -v male_connectome_graph.csv
 % transform-connectome_graph -f female_connectome_graph.csv
 % transform-connectome_graph -m male_connectome_graph.csv
 % greedy-match gm.csv gf.csv matching.csv
