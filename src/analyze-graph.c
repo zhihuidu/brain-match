@@ -3,157 +3,287 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
-#include <limits.h>  // Added for INT_MAX
+#include <limits.h>
+#include <stdint.h>  // Added for SIZE_MAX
 
-#define MAX_VERTICES 20000
-#define MAX_LINE_LENGTH 256
-#define MAX_WEIGHT 1000  // Adjust based on expected maximum weight
+#define INITIAL_HASH_SIZE 16384
+#define INITIAL_BUFFER_SIZE 1024
+#define RESIZE_FACTOR 2
+#define MAX_ID_LENGTH 256
 
-typedef struct {
-    char id[64];
+// Forward declarations
+void cleanup_and_exit(const char* message);
+static unsigned int hash(const char* str, size_t table_size);
+
+typedef struct Vertex {
+    char* id;
     int degree;
-    int total_weight;
+    long long total_weight;
+    struct Vertex* next;
 } Vertex;
 
 typedef struct {
-    Vertex* vertices;
-    int count;
-} VertexSet;
+    Vertex** table;
+    size_t size;
+    size_t count;
+    size_t collisions;
+} VertexHashTable;
 
 typedef struct {
     int weight;
-    int frequency;
+    size_t frequency;
 } WeightFreq;
 
-// Weight statistics structure
 typedef struct {
-    int* weights;
-    int count;
-    int min;
-    int max;
+    long long min;
+    long long max;
     double mean;
     double median;
     double std_dev;
-    // Histogram data
     WeightFreq* distribution;
-    int unique_weights;
+    size_t unique_weights;
+    size_t total_count;
 } WeightStats;
 
-// Function to compare weights for sorting
-int compare_weights(const void* a, const void* b) {
-    return (*(int*)a - *(int*)b);
+typedef struct {
+    int* data;
+    size_t size;
+    size_t capacity;
+} WeightArray;
+
+// Moved hash function definition before its first use
+static unsigned int hash(const char* str, size_t table_size) {
+    unsigned int hash = 5381;
+    int c;
+    while ((c = *str++))
+        hash = ((hash << 5) + hash) + c;
+    return hash & (table_size - 1);
 }
 
-// Function to compare weight frequencies for sorting
-int compare_weight_freq(const void* a, const void* b) {
-    return ((WeightFreq*)b)->frequency - ((WeightFreq*)a)->frequency;
+// Error handling function
+void cleanup_and_exit(const char* message) {
+    fprintf(stderr, "Error: %s\n", message);
+    exit(1);
 }
 
-// Function to check if vertex exists and return its index
-int find_vertex(VertexSet* set, const char* id) {
-    for (int i = 0; i < set->count; i++) {
-        if (strcmp(set->vertices[i].id, id) == 0) {
-            return i;
+// Safe memory allocation wrapper
+void* safe_malloc(size_t size, const char* error_msg) {
+    void* ptr = malloc(size);
+    if (!ptr) {
+        cleanup_and_exit(error_msg);
+    }
+    return ptr;
+}
+
+// Safe memory reallocation wrapper
+void* safe_realloc(void* ptr, size_t size, const char* error_msg) {
+    void* new_ptr = realloc(ptr, size);
+    if (!new_ptr) {
+        cleanup_and_exit(error_msg);
+    }
+    return new_ptr;
+}
+
+// Safe string duplication
+char* safe_strdup(const char* str, const char* error_msg) {
+    char* new_str = strdup(str);
+    if (!new_str) {
+        cleanup_and_exit(error_msg);
+    }
+    return new_str;
+}
+
+// Initialize weight array with error checking
+WeightArray* create_weight_array() {
+    WeightArray* wa = safe_malloc(sizeof(WeightArray), 
+                                "Failed to allocate weight array structure");
+    wa->capacity = INITIAL_BUFFER_SIZE;
+    wa->size = 0;
+    wa->data = safe_malloc(wa->capacity * sizeof(int), 
+                          "Failed to allocate weight array data");
+    return wa;
+}
+
+// Add weight to array with safety checks
+void add_weight(WeightArray* wa, int weight) {
+    if (wa->size >= wa->capacity) {
+        // Check for overflow before multiplying
+        if (wa->capacity > SIZE_MAX / RESIZE_FACTOR / sizeof(int)) {
+            cleanup_and_exit("Weight array capacity overflow");
+        }
+        wa->capacity *= RESIZE_FACTOR;
+        wa->data = safe_realloc(wa->data, wa->capacity * sizeof(int),
+                               "Failed to resize weight array");
+    }
+    wa->data[wa->size++] = weight;
+}
+
+// Create hash table with error checking
+VertexHashTable* create_hash_table() {
+    VertexHashTable* ht = safe_malloc(sizeof(VertexHashTable),
+                                    "Failed to allocate hash table structure");
+    
+    // Check for overflow before allocating table
+    if (INITIAL_HASH_SIZE > SIZE_MAX / sizeof(Vertex*)) {
+        cleanup_and_exit("Hash table size overflow");
+    }
+    
+    ht->size = INITIAL_HASH_SIZE;
+    ht->table = safe_malloc(ht->size * sizeof(Vertex*),
+                           "Failed to allocate hash table array");
+    memset(ht->table, 0, ht->size * sizeof(Vertex*));
+    ht->count = 0;
+    ht->collisions = 0;
+    return ht;
+}
+
+// Resize hash table with safety checks
+void resize_hash_table(VertexHashTable* ht) {
+    // Check for overflow before calculating new size
+    if (ht->size > SIZE_MAX / RESIZE_FACTOR / sizeof(Vertex*)) {
+        cleanup_and_exit("Hash table resize overflow");
+    }
+    
+    size_t new_size = ht->size * RESIZE_FACTOR;
+    Vertex** new_table = safe_malloc(new_size * sizeof(Vertex*),
+                                   "Failed to allocate resized hash table");
+    memset(new_table, 0, new_size * sizeof(Vertex*));
+    
+    // Rehash all entries
+    for (size_t i = 0; i < ht->size; i++) {
+        Vertex* current = ht->table[i];
+        while (current) {
+            Vertex* next = current->next;
+            unsigned int new_index = hash(current->id, new_size);
+            current->next = new_table[new_index];
+            new_table[new_index] = current;
+            current = next;
         }
     }
-    return -1;
+    
+    free(ht->table);
+    ht->table = new_table;
+    ht->size = new_size;
+    ht->collisions = 0;
 }
 
-// Function to add or update vertex
-void add_vertex(VertexSet* set, const char* id, int weight) {
-    int index = find_vertex(set, id);
-    if (index == -1) {
-        strcpy(set->vertices[set->count].id, id);
-        set->vertices[set->count].degree = 1;
-        set->vertices[set->count].total_weight = weight;
-        set->count++;
-    } else {
-        set->vertices[index].degree++;
-        set->vertices[index].total_weight += weight;
+// Find or create vertex with safety checks
+Vertex* find_or_create_vertex(VertexHashTable* ht, const char* id, int weight) {
+    if (ht->collisions > (ht->size * 0.7)) {
+        resize_hash_table(ht);
     }
+    
+    unsigned int index = hash(id, ht->size);
+    Vertex* current = ht->table[index];
+    
+    while (current) {
+        if (strcmp(current->id, id) == 0) {
+            current->degree++;
+            current->total_weight += weight;
+            return current;
+        }
+        current = current->next;
+        ht->collisions++;
+    }
+    
+    // Create new vertex with safety checks
+    Vertex* new_vertex = safe_malloc(sizeof(Vertex),
+                                   "Failed to allocate new vertex");
+    new_vertex->id = safe_strdup(id, "Failed to duplicate vertex ID");
+    new_vertex->degree = 1;
+    new_vertex->total_weight = weight;
+    new_vertex->next = ht->table[index];
+    ht->table[index] = new_vertex;
+    ht->count++;
+    
+    return new_vertex;
 }
 
-void print_usage(const char* program_name) {
-    printf("Usage: %s [-v] <csv_filename>\n", program_name);
-    printf("Options:\n");
-    printf("  -v    Enable verbose output\n");
-    printf("  csv_filename    Path to the CSV file containing graph edges\n");
-}
-
-char get_vertex_type(const char* id) {
-    return tolower(id[0]);
-}
-
-// Function to calculate weight statistics
-WeightStats calculate_weight_stats(int* weights, int count) {
+// Calculate statistics with safety checks
+WeightStats calculate_weight_stats(WeightArray* weights) {
     WeightStats stats;
-    stats.weights = weights;
-    stats.count = count;
+    stats.total_count = weights->size;
     
-    // Sort weights for easier calculations
-    qsort(weights, count, sizeof(int), compare_weights);
+    if (stats.total_count == 0) {
+        memset(&stats, 0, sizeof(WeightStats));
+        return stats;
+    }
     
-    // Calculate basic statistics
-    stats.min = weights[0];
-    stats.max = weights[count - 1];
-    
-    // Calculate mean
+    stats.min = INT_MAX;
+    stats.max = INT_MIN;
     double sum = 0;
-    for (int i = 0; i < count; i++) {
-        sum += weights[i];
-    }
-    stats.mean = sum / count;
     
-    // Calculate median
-    if (count % 2 == 0) {
-        stats.median = (weights[count/2 - 1] + weights[count/2]) / 2.0;
-    } else {
-        stats.median = weights[count/2];
+    for (size_t i = 0; i < weights->size; i++) {
+        int w = weights->data[i];
+        if (w < stats.min) stats.min = w;
+        if (w > stats.max) stats.max = w;
+        sum += w;
+    }
+    stats.mean = sum / stats.total_count;
+    
+    // Check for integer overflow in range calculation
+    if (stats.max > INT_MAX - stats.min) {
+        cleanup_and_exit("Weight range overflow");
+    }
+    size_t range = stats.max - stats.min + 1;
+    
+    // Check for multiplication overflow
+    if (range > SIZE_MAX / sizeof(size_t)) {
+        cleanup_and_exit("Frequency array size overflow");
     }
     
-    // Calculate standard deviation
+    size_t* freq = safe_malloc(range * sizeof(size_t),
+                              "Failed to allocate frequency array");
+    memset(freq, 0, range * sizeof(size_t));
+    
     double sum_squared_diff = 0;
-    for (int i = 0; i < count; i++) {
-        double diff = weights[i] - stats.mean;
+    for (size_t i = 0; i < weights->size; i++) {
+        int w = weights->data[i];
+        freq[w - stats.min]++;
+        double diff = w - stats.mean;
         sum_squared_diff += diff * diff;
     }
-    stats.std_dev = sqrt(sum_squared_diff / count);
+    stats.std_dev = sqrt(sum_squared_diff / stats.total_count);
     
-    // Calculate weight distribution
-    stats.distribution = malloc(MAX_WEIGHT * sizeof(WeightFreq));
-    stats.unique_weights = 0;
-    
-    int current_weight = weights[0];
-    int current_freq = 1;
-    
-    for (int i = 1; i < count; i++) {
-        if (weights[i] == current_weight) {
-            current_freq++;
-        } else {
-            stats.distribution[stats.unique_weights].weight = current_weight;
-            stats.distribution[stats.unique_weights].frequency = current_freq;
-            stats.unique_weights++;
-            current_weight = weights[i];
-            current_freq = 1;
+    // Calculate median
+    size_t median_pos = stats.total_count / 2;
+    size_t count = 0;
+    for (size_t i = 0; i < range; i++) {
+        count += freq[i];
+        if (count > median_pos) {
+            stats.median = i + stats.min;
+            break;
         }
     }
-    // Add last weight
-    stats.distribution[stats.unique_weights].weight = current_weight;
-    stats.distribution[stats.unique_weights].frequency = current_freq;
-    stats.unique_weights++;
     
-    // Sort distribution by frequency
-    qsort(stats.distribution, stats.unique_weights, sizeof(WeightFreq), compare_weight_freq);
+    // Count unique weights
+    stats.unique_weights = 0;
+    for (size_t i = 0; i < range; i++) {
+        if (freq[i] > 0) stats.unique_weights++;
+    }
     
+    // Allocate and fill distribution array
+    stats.distribution = safe_malloc(stats.unique_weights * sizeof(WeightFreq),
+                                   "Failed to allocate weight distribution");
+    size_t dist_index = 0;
+    for (size_t i = 0; i < range; i++) {
+        if (freq[i] > 0) {
+            stats.distribution[dist_index].weight = i + stats.min;
+            stats.distribution[dist_index].frequency = freq[i];
+            dist_index++;
+        }
+    }
+    
+    free(freq);
     return stats;
 }
 
-void print_weight_distribution(WeightStats* stats) {
+void print_weight_distribution(WeightStats* stats, const int* weights, size_t weight_count) {
     printf("\nWeight Distribution Analysis:\n");
     printf("---------------------------\n");
     printf("Basic Statistics:\n");
-    printf("- Minimum weight: %d\n", stats->min);
-    printf("- Maximum weight: %d\n", stats->max);
+    printf("- Minimum weight: %lld\n", stats->min);
+    printf("- Maximum weight: %lld\n", stats->max);
     printf("- Mean weight: %.2f\n", stats->mean);
     printf("- Median weight: %.2f\n", stats->median);
     printf("- Standard deviation: %.2f\n", stats->std_dev);
@@ -161,21 +291,23 @@ void print_weight_distribution(WeightStats* stats) {
     printf("\nMost Common Weights (Top 10):\n");
     int top_n = (stats->unique_weights < 10) ? stats->unique_weights : 10;
     for (int i = 0; i < top_n; i++) {
-        printf("- Weight %d: %d occurrences (%.1f%%)\n", 
+        printf("- Weight %d: %zu occurrences (%.1f%%)\n", 
                stats->distribution[i].weight,
                stats->distribution[i].frequency,
-               (100.0 * stats->distribution[i].frequency) / stats->count);
+               (100.0 * stats->distribution[i].frequency) / stats->total_count);
     }
     
-    // Print weight range distribution
+    // Print weight range distribution using raw weights
     printf("\nWeight Range Distribution:\n");
-    int ranges[6] = {0}; // 0-10, 11-50, 51-100, 101-500, 501-1000, >1000
-    for (int i = 0; i < stats->count; i++) {
-        if (stats->weights[i] <= 10) ranges[0]++;
-        else if (stats->weights[i] <= 50) ranges[1]++;
-        else if (stats->weights[i] <= 100) ranges[2]++;
-        else if (stats->weights[i] <= 500) ranges[3]++;
-        else if (stats->weights[i] <= 1000) ranges[4]++;
+    size_t ranges[6] = {0}; // 0-10, 11-50, 51-100, 101-500, 501-1000, >1000
+    
+    for (size_t i = 0; i < weight_count; i++) {
+        int w = weights[i];
+        if (w <= 10) ranges[0]++;
+        else if (w <= 50) ranges[1]++;
+        else if (w <= 100) ranges[2]++;
+        else if (w <= 500) ranges[3]++;
+        else if (w <= 1000) ranges[4]++;
         else ranges[5]++;
     }
     
@@ -184,151 +316,99 @@ void print_weight_distribution(WeightStats* stats) {
     };
     
     for (int i = 0; i < 6; i++) {
-        printf("- %s: %d edges (%.1f%%)\n", 
+        printf("- %s: %zu edges (%.1f%%)\n", 
                range_labels[i], 
-               ranges[i], 
-               (100.0 * ranges[i]) / stats->count);
+               ranges[i],
+               (100.0 * ranges[i]) / weight_count);
     }
 }
 
-void print_verbose_stats(VertexSet* set, int* weights, int weight_count) {
-    // Calculate vertex type statistics
-    int type_counts[128] = {0};
-    int max_degree = 0;
-    int min_degree = INT_MAX;
-    long total_weight = 0;
-    
-    for (int i = 0; i < set->count; i++) {
-        char type = get_vertex_type(set->vertices[i].id);
-        type_counts[(int)type]++;
-        max_degree = (set->vertices[i].degree > max_degree) ? set->vertices[i].degree : max_degree;
-        min_degree = (set->vertices[i].degree < min_degree) ? set->vertices[i].degree : min_degree;
-        total_weight += set->vertices[i].total_weight;
-    }
-
-    printf("\nDetailed Statistics:\n");
-    printf("-------------------\n");
-    printf("Vertex Distribution:\n");
-    for (int i = 0; i < 128; i++) {
-        if (type_counts[i] > 0) {
-            printf("- Vertices starting with '%c': %d\n", (char)i, type_counts[i]);
-        }
+void process_graph(const char* filename, int verbose) {
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        fprintf(stderr, "Error: Cannot open file '%s'\n", filename);
+        return;
     }
     
-    printf("\nDegree Statistics:\n");
-    printf("- Maximum vertex degree: %d\n", max_degree);
-    printf("- Minimum vertex degree: %d\n", min_degree);
-    printf("- Average vertex degree: %.2f\n", (float)total_weight / set->count);
+    VertexHashTable* ht = create_hash_table();
+    WeightArray* weights = create_weight_array();
     
-    printf("\nTop 5 vertices by degree:\n");
-    int* indices = malloc(set->count * sizeof(int));
-    for (int i = 0; i < set->count; i++) indices[i] = i;
+    char* buffer = NULL;
+    size_t buffer_size = 0;
+    size_t edges = 0;
     
-    for (int i = 0; i < 5 && i < set->count; i++) {
-        for (int j = i + 1; j < set->count; j++) {
-            if (set->vertices[indices[j]].degree > set->vertices[indices[i]].degree) {
-                int temp = indices[i];
-                indices[i] = indices[j];
-                indices[j] = temp;
+    // Skip header
+    if (getline(&buffer, &buffer_size, file) == -1) {
+        cleanup_and_exit("Failed to read header line");
+    }
+    
+    char* from_id = safe_malloc(MAX_ID_LENGTH, "Failed to allocate from_id buffer");
+    char* to_id = safe_malloc(MAX_ID_LENGTH, "Failed to allocate to_id buffer");
+    int weight;
+    
+    while (getline(&buffer, &buffer_size, file) != -1) {
+        if (sscanf(buffer, "%[^,],%[^,],%d", from_id, to_id, &weight) == 3) {
+            find_or_create_vertex(ht, from_id, weight);
+            find_or_create_vertex(ht, to_id, weight);
+            add_weight(weights, weight);
+            edges++;
+            
+            if (verbose && edges % 1000000 == 0) {
+                printf("Processed %zu million edges...\n", edges / 1000000);
             }
         }
     }
     
-    for (int i = 0; i < 5 && i < set->count; i++) {
-        printf("- %s: %d connections, total weight: %d\n",
-               set->vertices[indices[i]].id,
-               set->vertices[indices[i]].degree,
-               set->vertices[indices[i]].total_weight);
+    printf("\nResults for %s:\n", filename);
+    printf("Processed %zu edges\n", edges);
+    printf("Found %zu unique vertices\n", ht->count);
+    
+    if (verbose) {
+        WeightStats stats = calculate_weight_stats(weights);
+        // Pass the raw weights array to print_weight_distribution
+        print_weight_distribution(&stats, weights->data, weights->size);
+        free(stats.distribution);
     }
     
-    free(indices);
-    
-    // Calculate and print weight distribution
-    WeightStats weight_stats = calculate_weight_stats(weights, weight_count);
-    print_weight_distribution(&weight_stats);
-    
-    free(weight_stats.distribution);
+    // Cleanup in reverse order of allocation
+    for (size_t i = 0; i < ht->size; i++) {
+        Vertex* current = ht->table[i];
+        while (current) {
+            Vertex* next = current->next;
+            free(current->id);
+            free(current);
+            current = next;
+        }
+    }
+    free(ht->table);
+    free(ht);
+    free(weights->data);
+    free(weights);
+    free(buffer);
+    free(from_id);
+    free(to_id);
+    fclose(file);
 }
 
 int main(int argc, char *argv[]) {
-    int verbose = 0;
-    const char* filename = NULL;
-    
     if (argc < 2 || argc > 3) {
-        print_usage(argv[0]);
+        printf("Usage: %s [-v] <csv_filename>\n", argv[0]);
+        printf("Options:\n");
+        printf("  -v    Enable verbose output\n");
+        printf("  csv_filename    Path to the CSV file containing graph edges\n");
         return 1;
     }
+    
+    const char* filename;
+    int verbose = 0;
     
     if (argc == 2) {
         filename = argv[1];
     } else {
-        if (strcmp(argv[1], "-v") == 0) {
-            verbose = 1;
-            filename = argv[2];
-        } else if (strcmp(argv[2], "-v") == 0) {
-            verbose = 1;
-            filename = argv[1];
-        } else {
-            print_usage(argv[0]);
-            return 1;
-        }
+        verbose = (strcmp(argv[1], "-v") == 0 || strcmp(argv[2], "-v") == 0);
+        filename = (strcmp(argv[1], "-v") == 0) ? argv[2] : argv[1];
     }
-
-    FILE* file = fopen(filename, "r");
-    if (!file) {
-        printf("Error: Cannot open file '%s'\n", filename);
-        return 1;
-    }
-
-    VertexSet set;
-    set.vertices = (Vertex*)malloc(MAX_VERTICES * sizeof(Vertex));
-    set.count = 0;
-
-    // Array to store all weights for distribution analysis
-    int* weights = malloc(MAX_VERTICES * MAX_VERTICES * sizeof(int)); // Upper bound
-    int weight_count = 0;
-
-    if (!set.vertices || !weights) {
-        printf("Error: Memory allocation failed\n");
-        fclose(file);
-        return 1;
-    }
-
-    char line[MAX_LINE_LENGTH];
-    int line_count = 0;
-    int edges = 0;
     
-    fgets(line, MAX_LINE_LENGTH, file);
-    
-    while (fgets(line, MAX_LINE_LENGTH, file)) {
-        char from_id[64], to_id[64];
-        int weight;
-        line_count++;
-        
-        if (sscanf(line, "%[^,],%[^,],%d", from_id, to_id, &weight) == 3) {
-            add_vertex(&set, from_id, weight);
-            add_vertex(&set, to_id, weight);
-            weights[weight_count++] = weight;
-            edges++;
-            
-            if (verbose && edges % 1000 == 0) {
-                printf("Processed %d edges...\n", edges);
-            }
-        } else {
-            printf("Warning: Malformed line %d in file %s\n", line_count, filename);
-        }
-    }
-
-    printf("\nResults for %s:\n", filename);
-    printf("Processed %d edges\n", edges);
-    printf("Found %d unique vertices\n", set.count);
-
-    if (verbose) {
-        print_verbose_stats(&set, weights, weight_count);
-    }
-
-    free(set.vertices);
-    free(weights);
-    fclose(file);
+    process_graph(filename, verbose);
     return 0;
 }
