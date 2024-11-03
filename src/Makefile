@@ -13,7 +13,7 @@ INCLUDE_FLAGS = -I$(LAPACK_INCLUDE_DIR)
 # Targets for each executable
 TARGETS = analyze-graph transform-male-female-VNC-inputs transform-solution convert-VNC-matching \
 	score-matching identity-match spectral-match greedy-match greedy-feature-match \
-	refine-matching-hillclimb
+	refine-matching-hillclimb refine-twohop
 
 # Source files for each program
 ANALYZE_GRAPH_SRCS  = analyze-graph.c
@@ -26,6 +26,7 @@ SPECTRAL_MATCH_SRCS = spectral-match.c
 GREEDY_MATCH_SRCS   = greedy-match.c
 GREEDY_FEATURE_MATCH_SRCS   = greedy-feature-match.c
 REFINE_MATCH_HILLCLIMB_SRCS = refine-matching-hillclimb.c
+REFINE_TWOHOP_SRCS    = refine-twohop.c
 
 
 # Default target to build all programs
@@ -69,6 +70,10 @@ greedy-feature-match: $(GREEDY_FEATURE_MATCH_SRCS)
 
 # Build refine-matching-hillclimb
 refine-matching-hillclimb: $(REFINE_MATCH_HILLCLIMB_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -pthread -o $@ $^ -lm
+
+# Build refine-twohop
+refine-twohop: $(REFINE_TWOHOP_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ -lm
 
 # Clean up build files

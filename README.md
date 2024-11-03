@@ -13,6 +13,7 @@ This contains several helper programs as well:
 **greedy-match**: Given two graphs, use a greedy similarity method to find a matching \
 **greedy-feature-match**: Given two graphs, use a greedy similarity method with extended structural features to find a matching \
 **refine-match-hillclimb**: Given two graphs and matching, use hill-climbing to improve the match
+**refine-twohop**: Given two graphs and matching, use swaps in 2-hop neighborhoods to improve the match
 
 
 **Sample workflow:** 
@@ -23,7 +24,8 @@ This contains several helper programs as well:
 % analyze-graph -v male_connectome_graph.csv
 % transform-male-female-VNC-inputs male_connectome_graph.csv female_connectome_graph.csv vnc_matching_submission_benchmark_5154247_generic.csv
 % greedy-match gm.csv gf.csv matching.csv
-% score-matching  gm.csv gf.csv matching.csv
+% refine-twohop gm.csv gf.csv matching.csv new-matching.csv
+% score-matching  gm.csv gf.csv new-matching.csv
 ```
 
 David A. Bader
