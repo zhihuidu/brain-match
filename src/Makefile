@@ -2,13 +2,17 @@
 CC = gcc
 CFLAGS = -O3 -Wall
 
+
 # Directories for LAPACK/BLAS (update these if needed)
 LAPACK_INCLUDE_DIR ?=  /project/bader/bader/lapack-3.12.0/build/include/
 LAPACK_LIB_DIR ?= /project/bader/bader/lapack-3.12.0/build/lib/
 
+INCLUDE_FLAGS ?=
+LDFLAGS =  -lm
+
 # Linker flags for LAPACK, BLAS, and math libraries
-LDFLAGS = -L$(LAPACK_LIB_DIR) -llapack -lblas -lgfortran -lm
-INCLUDE_FLAGS = -I$(LAPACK_INCLUDE_DIR)
+LAPACK_LDFLAGS = -L$(LAPACK_LIB_DIR) -llapack -lblas -lgfortran $(LDFLAGS)
+LAPACK_INCLUDE_FLAGS = $(INCLUDE_FLAGS) -I$(LAPACK_INCLUDE_DIR)
 
 # Targets for each executable
 TARGETS = analyze-graph transform-male-female-VNC-inputs transform-solution convert-VNC-matching \
@@ -34,7 +38,7 @@ all: $(TARGETS)
 
 # Analyze a connectome graph
 analyze-graph: $(ANALYZE_GRAPH_SRCS)
-	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ -lm
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
 
 # Transform VNC male and female input graphs and matching to gm and gf
 transform-male-female-VNC-inputs: $(TRANSFORM_SRCS)
@@ -58,7 +62,7 @@ identity-match: $(IDENTITY_MATCH_SRCS)
 
 # Build spectral-match with LAPACK and BLAS
 spectral-match: $(SPECTRAL_MATCH_SRCS)
-	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(LAPACK_INCLUDE_FLAGS) -o $@ $^ $(LAPACK_LDFLAGS)
 
 # Build Greedy match
 greedy-match: $(GREEDY_MATCH_SRCS)
@@ -66,15 +70,15 @@ greedy-match: $(GREEDY_MATCH_SRCS)
 
 # Build Greedy feature match
 greedy-feature-match: $(GREEDY_FEATURE_MATCH_SRCS)
-	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ -lm
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
 
 # Build refine-matching-hillclimb
 refine-matching-hillclimb: $(REFINE_MATCH_HILLCLIMB_SRCS)
-	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -pthread -o $@ $^ -lm
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -pthread -o $@ $^ $(LDFLAGS)
 
 # Build refine-twohop
 refine-twohop: $(REFINE_TWOHOP_SRCS)
-	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ -lm
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
 
 # Clean up build files
 clean:

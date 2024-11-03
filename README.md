@@ -26,6 +26,7 @@ This contains several helper programs as well:
 % greedy-match gm.csv gf.csv matching.csv
 % refine-twohop gm.csv gf.csv matching.csv new-matching.csv
 % score-matching  gm.csv gf.csv new-matching.csv
+% transform-solution new-matching.csv
 ```
 
 David A. Bader
