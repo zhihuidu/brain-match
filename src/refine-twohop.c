@@ -448,32 +448,60 @@ int calculate_swap_delta(Graph* male_graph, Graph* female_graph, int* matching,
 
 void optimize_matching(Graph* male_graph, Graph* female_graph, int* matching, 
                       NodeMap* male_map, NodeMap* female_map) {
-    printf("\nStarting optimization...\n");
+    printf("\n=== Starting Graph Matching Optimization ===\n");
+    printf("Graph sizes: Male=%d nodes, Female=%d nodes\n", 
+           male_graph->node_count, female_graph->node_count);
     time_t start_time = time(NULL);
+    time_t last_update = start_time;
     
     // Store initial score
     const int initial_score = calculate_score(male_graph, female_graph, matching);
     int current_score = initial_score;
-    printf("Initial score: %d\n", initial_score);
+    printf("\nInitial matching score: %d\n", initial_score);
     
     // Calculate vertex weights
-    printf("Calculating vertex weights...\n");
+    printf("\n=== Phase 1: Calculating Vertex Weights ===\n");
     typedef struct {
         int vertex;
         long long weight;
+        int degree;  // Store degree for reporting
     } VertexWeight;
     
     VertexWeight* vertices = safe_malloc(sizeof(VertexWeight) * male_graph->node_count);
+    long long total_weight = 0;
+    int max_degree = 0;
+    
     for (int i = 0; i < male_graph->node_count; i++) {
         vertices[i].vertex = i;
+        vertices[i].degree = 0;
+        // Count degree and calculate weight
+        for (Edge* e = male_graph->edges[i]; e; e = e->next) {
+            vertices[i].degree++;
+        }
         vertices[i].weight = calculate_node_weight(male_graph, i);
-        if (i % 1000 == 0) {
-            printf("Processed %d vertices...\n", i);
+        total_weight += vertices[i].weight;
+        if (vertices[i].degree > max_degree) max_degree = vertices[i].degree;
+        
+        if (i % 1000 == 0 || i == male_graph->node_count - 1) {
+            time_t current = time(NULL);
+            if (current - last_update >= 5) {  // Update every 5 seconds
+                printf("Progress: %d/%d vertices (%.1f%%) - Max degree: %d - Elapsed: %ld seconds\n",
+                       i + 1, male_graph->node_count, 
+                       100.0 * (i + 1) / male_graph->node_count,
+                       max_degree, current - start_time);
+                last_update = current;
+            }
         }
     }
     
-    // Sort by weight (descending)
-    printf("Sorting vertices by weight...\n");
+    printf("\nWeight calculation complete:\n");
+    printf("- Total weight: %lld\n", total_weight);
+    printf("- Average weight: %.2f\n", (double)total_weight / male_graph->node_count);
+    printf("- Maximum degree: %d\n", max_degree);
+    
+    // Sort by weight
+    printf("\n=== Phase 2: Sorting Vertices ===\n");
+    printf("Sorting %d vertices by weight...\n", male_graph->node_count);
     for (int i = 0; i < male_graph->node_count - 1; i++) {
         for (int j = i + 1; j < male_graph->node_count; j++) {
             if (vertices[i].weight < vertices[j].weight) {
@@ -483,28 +511,53 @@ void optimize_matching(Graph* male_graph, Graph* female_graph, int* matching,
             }
         }
         if (i % 1000 == 0) {
-            printf("Sorted %d vertices...\n", i);
+            time_t current = time(NULL);
+            if (current - last_update >= 5) {
+                printf("Sorting progress: %.1f%% complete [%ld seconds]\n",
+                       100.0 * i / male_graph->node_count, current - start_time);
+                last_update = current;
+            }
         }
     }
     
-    printf("Starting refinement...\n");
+    // Report top vertices
+    printf("\nTop 10 vertices by weight:\n");
+    printf("Rank\tVertex ID\tWeight\t\tDegree\n");
+    printf("----------------------------------------\n");
+    for (int i = 0; i < 10 && i < male_graph->node_count; i++) {
+        printf("%d\t%d\t\t%lld\t\t%d\n", 
+               i + 1, male_map->ids[vertices[i].vertex], 
+               vertices[i].weight, vertices[i].degree);
+    }
+    
+    printf("\n=== Phase 3: Starting Refinement ===\n");
     int improvements = 0;
     int iterations = 0;
+    int attempts = 0;
+    int total_swaps_considered = 0;
+    int beneficial_swaps = 0;
     bool improved;
     
     do {
         improved = false;
         iterations++;
+        int iteration_improvements = 0;
+        printf("\nIteration %d starting...\n", iterations);
+        time_t iter_start = time(NULL);
         
         for (int idx = 0; idx < male_graph->node_count; idx++) {
             int vertex = vertices[idx].vertex;
             bool vertex_improved = false;
+            int vertex_attempts = 0;
             
             // Try swaps in 2-hop neighborhood
             for (Edge* e1 = male_graph->edges[vertex]; e1 && !vertex_improved; e1 = e1->next) {
                 for (Edge* e2 = male_graph->edges[e1->target]; e2; e2 = e2->next) {
                     int target = e2->target;
                     if (target == vertex) continue;
+                    
+                    total_swaps_considered++;
+                    vertex_attempts++;
                     
                     int delta = calculate_swap_delta(male_graph, female_graph, matching, 
                                                    vertex, target);
@@ -517,6 +570,8 @@ void optimize_matching(Graph* male_graph, Graph* female_graph, int* matching,
                         
                         current_score += delta;
                         improvements++;
+                        iteration_improvements++;
+                        beneficial_swaps++;
                         improved = true;
                         vertex_improved = true;
                         
@@ -525,35 +580,82 @@ void optimize_matching(Graph* male_graph, Graph* female_graph, int* matching,
                                current_score);
                         write_matching(filename, matching, male_map, female_map);
                         
-                        printf("Improvement %d: score = %d (vertex %d with %d) [%ld seconds]\n",
-                               improvements, current_score, vertex, target, 
-                               time(NULL) - start_time);
+                        time_t current = time(NULL);
+                        printf("\nImprovement found!\n");
+                        printf("- Vertices: %d <-> %d\n", 
+                               male_map->ids[vertex], male_map->ids[target]);
+                        printf("- Score improvement: +%d (new score: %d)\n", delta, current_score);
+                        printf("- Time since start: %ld seconds\n", current - start_time);
+                        printf("- Improvement rate: %.2f per hour\n", 
+                               3600.0 * improvements / (current - start_time));
                         break;
                     }
                 }
             }
             
-            if (idx % 1000 == 0) {
-                printf("Iteration %d: Processed %d vertices, current score: %d [%ld seconds]\n",
-                       iterations, idx, current_score, time(NULL) - start_time);
+            attempts += vertex_attempts;
+            
+            // Progress updates
+            if (idx % 100 == 0 || vertex_improved) {
+                time_t current = time(NULL);
+                if (current - last_update >= 5) {
+                    printf("\nStatus Update:\n");
+                    printf("- Processing vertex %d/%d (%.1f%%)\n", 
+                           idx + 1, male_graph->node_count,
+                           100.0 * (idx + 1) / male_graph->node_count);
+                    printf("- Current score: %d (%.2f%% improvement)\n", 
+                           current_score, 
+                           100.0 * (current_score - initial_score) / initial_score);
+                    printf("- Swaps considered: %d (%.2f%% beneficial)\n",
+                           total_swaps_considered,
+                           100.0 * beneficial_swaps / total_swaps_considered);
+                    printf("- Time elapsed: %ld seconds\n", current - start_time);
+                    last_update = current;
+                }
             }
         }
         
-        printf("Completed iteration %d: score = %d, improvements = %d [%ld seconds]\n",
-               iterations, current_score, improvements, time(NULL) - start_time);
-               
+        time_t iter_end = time(NULL);
+        printf("\nIteration %d complete:\n", iterations);
+        printf("- Improvements in this iteration: %d\n", iteration_improvements);
+        printf("- Current score: %d\n", current_score);
+        printf("- Iteration time: %ld seconds\n", iter_end - iter_start);
+        printf("- Total improvements: %d\n", improvements);
+        printf("- Improvement rate: %.2f per hour\n", 
+               3600.0 * improvements / (iter_end - start_time));
+        
     } while (improved && iterations < 10);
     
     free(vertices);
     
-    printf("\nOptimization complete:\n");
-    printf("Initial score: %d\n", initial_score);
-    printf("Final score: %d\n", current_score);
-    printf("Improvement: %.2f%%\n", 
+    // Final statistics
+    time_t end_time = time(NULL);
+    double hours = (end_time - start_time) / 3600.0;
+    
+    printf("\n=== Optimization Complete ===\n");
+    printf("\nScore Statistics:\n");
+    printf("- Initial score: %d\n", initial_score);
+    printf("- Final score: %d\n", current_score);
+    printf("- Absolute improvement: %d\n", current_score - initial_score);
+    printf("- Relative improvement: %.2f%%\n", 
            100.0 * (current_score - initial_score) / initial_score);
-    printf("Total improvements: %d\n", improvements);
-    printf("Total iterations: %d\n", iterations);
-    printf("Total time: %ld seconds\n", time(NULL) - start_time);
+    
+    printf("\nOperation Statistics:\n");
+    printf("- Total iterations: %d\n", iterations);
+    printf("- Total improvements: %d\n", improvements);
+    printf("- Total swaps considered: %d\n", total_swaps_considered);
+    printf("- Beneficial swaps: %d (%.2f%%)\n", 
+           beneficial_swaps, 100.0 * beneficial_swaps / total_swaps_considered);
+    printf("- Average attempts per improvement: %.1f\n", 
+           (double)total_swaps_considered / improvements);
+    
+    printf("\nTiming Statistics:\n");
+    printf("- Total time: %.2f hours (%.1f seconds)\n", hours, difftime(end_time, start_time));
+    printf("- Average time per iteration: %.1f seconds\n", 
+           difftime(end_time, start_time) / iterations);
+    printf("- Improvements per hour: %.1f\n", improvements / hours);
+    
+    printf("\nOptimization complete - final score: %d\n", current_score);
 }
 
 int main(int argc, char* argv[]) {
