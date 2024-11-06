@@ -17,7 +17,7 @@ LAPACK_INCLUDE_FLAGS = $(INCLUDE_FLAGS) -I$(LAPACK_INCLUDE_DIR)
 # Targets for each executable
 TARGETS = analyze-graph transform-male-female-VNC-inputs transform-solution convert-VNC-matching \
 	score-matching identity-match spectral-match greedy-match greedy-feature-match \
-	refine-matching-hillclimb refine-twohop graph-alignment
+	refine-matching-hillclimb refine-twohop graph-alignment graph-alignment-optimized
 
 # Source files for each program
 ANALYZE_GRAPH_SRCS  = analyze-graph.c
@@ -32,6 +32,7 @@ GREEDY_FEATURE_MATCH_SRCS   = greedy-feature-match.c
 REFINE_MATCH_HILLCLIMB_SRCS = refine-matching-hillclimb.c
 REFINE_TWOHOP_SRCS  = refine-twohop.c
 GRAPH_ALIGN_SRCS    = graph-alignment.c
+GRAPH_ALIGN_OPT_SRCS    = graph-alignment-optimized.c
 
 
 # Default target to build all programs
@@ -83,6 +84,10 @@ refine-twohop: $(REFINE_TWOHOP_SRCS)
 
 # Build graph-alignment
 graph-alignment: $(GRAPH_ALIGN_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
+
+# Build graph-alignment-optimized
+graph-alignment-optimized: $(GRAPH_ALIGN_OPT_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
 
 # Clean up build files
