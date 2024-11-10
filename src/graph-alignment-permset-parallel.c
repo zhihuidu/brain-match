@@ -8,7 +8,8 @@
 
 #define MAX_LINE_LENGTH 1024
 #define NUM_NODES 18524
-#define GROUP_SIZE 8
+#define GROUP_SIZE 12
+#define NUM_SAMPLES 1000000
 #define MAX_NODES 100000
 #define SAVE_INTERVAL 25
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -524,13 +525,52 @@ bool has_duplicate(int* arr, int len, int val) {
 }
 
 // Main optimization function
+// Generate a random permutation
+void generate_random_permutation(int* perm, int n) {
+    // Initialize with identity permutation
+    for (int i = 0; i < n; i++) {
+        perm[i] = i;
+    }
+    
+    // Fisher-Yates shuffle
+    for (int i = n-1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        int temp = perm[i];
+        perm[i] = perm[j];
+        perm[j] = temp;
+    }
+}
+
+// Modified function to generate random sample of permutations
+int** generate_permutation_samples(int n, int num_samples, int* total_samples) {
+    *total_samples = num_samples;
+    
+    int** permutations = malloc(num_samples * sizeof(int*));
+    for(int i = 0; i < num_samples; i++) {
+        permutations[i] = malloc(n * sizeof(int));
+        generate_random_permutation(permutations[i], n);
+        
+        // Verify this permutation isn't a duplicate (optional)
+        for(int j = 0; j < i; j++) {
+            if(memcmp(permutations[i], permutations[j], n * sizeof(int)) == 0) {
+                i--; // Try again for this sample
+                free(permutations[i+1]);
+                break;
+            }
+        }
+    }
+    
+    return permutations;
+}
+
+// Modified optimization function
 void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* out_path) {
     int current_score = calculate_alignment_score(gm, gf, current_mapping);
     ProgressStats* stats = init_progress_stats(current_score);
     
-    // Generate all possible permutations once
-    int total_perms;
-    int** permutations = generate_all_permutations(GROUP_SIZE, &total_perms);
+    // Generate sample of permutations
+    int total_samples;
+    int** permutations = generate_permutation_samples(GROUP_SIZE, NUM_SAMPLES, &total_samples);
     
     // Number of vertex groups to evaluate in parallel
     const int NUM_GROUPS = omp_get_max_threads();
@@ -538,7 +578,7 @@ void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* ou
     printf("\nInitializing optimization with:\n");
     printf("  - Number of threads: %d\n", NUM_GROUPS);
     printf("  - Group size: %d\n", GROUP_SIZE);
-    printf("  - Permutations per group: %d\n", total_perms);
+    printf("  - Random permutation samples: %d\n", total_samples);
     printf("  - Initial score: %d\n", current_score);
     printf("  - Output path: %s\n\n", out_path);
     
@@ -569,8 +609,33 @@ void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* ou
         }
         
         // Evaluate all groups in parallel
-        evaluate_vertex_groups(gm, gf, current_mapping, groups, NUM_GROUPS,
-                             permutations, total_perms);
+        #pragma omp parallel for schedule(dynamic, 1)
+        for(int g = 0; g < NUM_GROUPS; g++) {
+            PermutationResult* results = malloc(total_samples * sizeof(PermutationResult));
+            
+            // Evaluate permutations for this group
+            #pragma omp parallel for schedule(dynamic, 100)
+            for (int i = 0; i < total_samples; i++) {
+                results[i].delta = calculate_permutation_delta(gm, gf, current_mapping,
+                                                         groups[g].vertices, 
+                                                         permutations[i], GROUP_SIZE);
+                results[i].permutation = permutations[i];
+            }
+            
+            // Find best result for this group
+            groups[g].delta = 0;
+            groups[g].best_permutation = malloc(GROUP_SIZE * sizeof(int));
+            
+            for(int i = 0; i < total_samples; i++) {
+                if(results[i].delta > groups[g].delta) {
+                    groups[g].delta = results[i].delta;
+                    memcpy(groups[g].best_permutation, results[i].permutation,
+                           GROUP_SIZE * sizeof(int));
+                }
+            }
+            
+            free(results);
+        }
         
         // Find best improvement across all groups
         int best_group = -1;
@@ -598,7 +663,7 @@ void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* ou
             printf("  - Delta: %d\n", best_delta);
             printf("  - New score: %d\n", new_score);
             
-            // Immediately save the improved matching with score in filename
+            // Save immediately with score in filename
             char timestamp_filename[512];
             time_t now = time(NULL);
             struct tm *t = localtime(&now);
@@ -617,7 +682,7 @@ void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* ou
             print_detailed_progress(stats);
         }
         
-        // Clean up this iteration's permutations
+        // Clean up this iteration's improvements
         for(int g = 0; g < NUM_GROUPS; g++) {
             if(groups[g].delta > 0) {
                 free(groups[g].best_permutation);
@@ -626,7 +691,7 @@ void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* ou
     }
     
     // Cleanup
-    for(int i = 0; i < total_perms; i++) {
+    for(int i = 0; i < total_samples; i++) {
         free(permutations[i]);
     }
     free(permutations);
