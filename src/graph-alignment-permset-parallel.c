@@ -515,6 +515,14 @@ void apply_best_permutation(Graph* gm, Graph* gf, int* current_mapping,
     free(temp_mapping);
 }
 
+// Helper function to check for duplicates
+bool has_duplicate(int* arr, int len, int val) {
+    for (int i = 0; i < len; i++) {
+        if (arr[i] == val) return true;
+    }
+    return false;
+}
+
 // Main optimization function
 void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* out_path) {
     int current_score = calculate_alignment_score(gm, gf, current_mapping);
@@ -548,9 +556,14 @@ void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* ou
         printf("\nIteration %d:\n", stats->total_iterations + 1);
         for(int g = 0; g < NUM_GROUPS; g++) {
             printf("Group %d vertices:", g);
+            // Generate unique vertices for this group
             for (int i = 0; i < GROUP_SIZE; i++) {
-                groups[g].vertices[i] = 1 + rand() % NUM_NODES;
-                printf(" %d", groups[g].vertices[i]);
+                int new_vertex;
+                do {
+                    new_vertex = 1 + rand() % NUM_NODES;
+                } while (has_duplicate(groups[g].vertices, i, new_vertex));
+                groups[g].vertices[i] = new_vertex;
+                printf(" %d", new_vertex);
             }
             printf("\n");
         }
@@ -577,16 +590,24 @@ void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* ou
                                  groups[best_group].best_permutation,
                                  GROUP_SIZE);
             
+            // Verify new score
+            int new_score = calculate_alignment_score(gm, gf, current_mapping);
+            
             update_progress_stats(stats, best_delta, true);
             printf("\nApplied permutation from group %d:\n", best_group);
             printf("  - Delta: %d\n", best_delta);
-            printf("  - New score: %d\n", stats->current_score);
+            printf("  - New score: %d\n", new_score);
             
-            if (stats->total_improvements % SAVE_INTERVAL == 0) {
-                char temp_filename[256];
-                sprintf(temp_filename, "%s.temp%d", out_path, stats->total_improvements);
-                save_mapping(temp_filename, current_mapping, stats->current_score);
-            }
+            // Immediately save the improved matching with score in filename
+            char timestamp_filename[512];
+            time_t now = time(NULL);
+            struct tm *t = localtime(&now);
+            sprintf(timestamp_filename, "%s_score_%d_%04d%02d%02d_%02d%02d%02d.csv", 
+                    out_path, new_score,
+                    t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                    t->tm_hour, t->tm_min, t->tm_sec);
+            
+            save_mapping(timestamp_filename, current_mapping, new_score);
         } else {
             update_progress_stats(stats, 0, false);
         }
