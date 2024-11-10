@@ -18,6 +18,7 @@ LAPACK_INCLUDE_FLAGS = $(INCLUDE_FLAGS) -I$(LAPACK_INCLUDE_DIR)
 TARGETS = analyze-graph transform-male-female-VNC-inputs transform-solution convert-VNC-matching \
 	score-matching identity-match spectral-match greedy-match greedy-feature-match \
 	refine-matching-hillclimb refine-twohop graph-alignment graph-alignment-optimized graph-alignment-optimized-parallel \
+	graph-alignment-permset-parallel \
 	compute-betweenness-order
 
 # Source files for each program
@@ -35,6 +36,7 @@ REFINE_TWOHOP_SRCS  = refine-twohop.c
 GRAPH_ALIGN_SRCS    = graph-alignment.c
 GRAPH_ALIGN_OPT_SRCS    = graph-alignment-optimized.c
 GRAPH_ALIGN_OPT_PAR_SRCS    = graph-alignment-optimized-parallel.c
+GRAPH_ALIGN_PERMSET_PAR_SRCS    = graph-alignment-permset-parallel.c
 COMPUTE_BETWEENNESS_SRCS    = compute-betweenness-order.c
 
 
@@ -95,6 +97,10 @@ graph-alignment-optimized: $(GRAPH_ALIGN_OPT_SRCS)
 
 # Build graph-alignment-optimized-parallel
 graph-alignment-optimized-parallel: $(GRAPH_ALIGN_OPT_PAR_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -fopenmp -o $@ $^ $(LDFLAGS)
+
+# Build graph-alignment-permset-parallel
+graph-alignment-permset-parallel: $(GRAPH_ALIGN_PERMSET_PAR_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -fopenmp -o $@ $^ $(LDFLAGS)
 
 # Build compute-betweenness-order
