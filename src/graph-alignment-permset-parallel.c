@@ -8,8 +8,8 @@
 
 #define MAX_LINE_LENGTH 1024
 #define NUM_NODES 18524
-#define GROUP_SIZE 12
-#define NUM_SAMPLES 1000000
+#define GROUP_SIZE 6
+#define NUM_SAMPLES 0 /* Set to 0 to enumerate all permutations */
 #define MAX_NODES 100000
 #define SAVE_INTERVAL 25
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -542,25 +542,56 @@ void generate_random_permutation(int* perm, int n) {
 }
 
 // Modified function to generate random sample of permutations
+// Modified function to handle both sampling and complete enumeration
 int** generate_permutation_samples(int n, int num_samples, int* total_samples) {
-    *total_samples = num_samples;
-    
-    int** permutations = malloc(num_samples * sizeof(int*));
-    for(int i = 0; i < num_samples; i++) {
-        permutations[i] = malloc(n * sizeof(int));
-        generate_random_permutation(permutations[i], n);
+    if (num_samples <= 0) {
+        // Calculate total number of permutations (n!)
+        *total_samples = 1;
+        for(int i = 2; i <= n; i++) {
+            *total_samples *= i;
+        }
+        printf("Using complete enumeration: testing all %d permutations\n", *total_samples);
         
-        // Verify this permutation isn't a duplicate (optional)
-        for(int j = 0; j < i; j++) {
-            if(memcmp(permutations[i], permutations[j], n * sizeof(int)) == 0) {
-                i--; // Try again for this sample
-                free(permutations[i+1]);
-                break;
+        // Generate all permutations
+        int** permutations = malloc(*total_samples * sizeof(int*));
+        for(int i = 0; i < *total_samples; i++) {
+            permutations[i] = malloc(n * sizeof(int));
+        }
+        
+        // Initialize first permutation
+        for(int i = 0; i < n; i++) {
+            permutations[0][i] = i;
+        }
+        
+        // Generate all other permutations
+        for(int i = 1; i < *total_samples; i++) {
+            memcpy(permutations[i], permutations[i-1], n * sizeof(int));
+            next_permutation(permutations[i], n);
+        }
+        
+        return permutations;
+    } else {
+        // Use random sampling as before
+        *total_samples = num_samples;
+        printf("Using random sampling: testing %d random permutations\n", *total_samples);
+        
+        int** permutations = malloc(num_samples * sizeof(int*));
+        for(int i = 0; i < num_samples; i++) {
+            permutations[i] = malloc(n * sizeof(int));
+            generate_random_permutation(permutations[i], n);
+            
+            // Verify this permutation isn't a duplicate (optional)
+            for(int j = 0; j < i; j++) {
+                if(memcmp(permutations[i], permutations[j], n * sizeof(int)) == 0) {
+                    i--; // Try again for this sample
+                    free(permutations[i+1]);
+                    break;
+                }
             }
         }
+        
+        return permutations;
     }
-    
-    return permutations;
 }
 
 // Modified optimization function
