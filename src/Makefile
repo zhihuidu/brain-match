@@ -19,7 +19,7 @@ TARGETS = analyze-graph verify-mapping transform-male-female-VNC-inputs transfor
 	score-matching identity-match spectral-match greedy-match greedy-feature-match \
 	refine-matching-hillclimb refine-twohop graph-alignment graph-alignment-optimized graph-alignment-optimized-parallel \
 	graph-alignment-permset-parallel \
-	compute-betweenness-order
+	compute-betweenness-order re-alignment-parallel
 
 # Source files for each program
 ANALYZE_GRAPH_SRCS  = analyze-graph.c
@@ -39,6 +39,7 @@ GRAPH_ALIGN_OPT_SRCS    = graph-alignment-optimized.c
 GRAPH_ALIGN_OPT_PAR_SRCS    = graph-alignment-optimized-parallel.c
 GRAPH_ALIGN_PERMSET_PAR_SRCS    = graph-alignment-permset-parallel.c
 COMPUTE_BETWEENNESS_SRCS    = compute-betweenness-order.c
+GRAPH_REALIGN_PAR_SRCS    = re-alignment-parallel.c
 
 
 # Default target to build all programs
@@ -110,6 +111,10 @@ graph-alignment-permset-parallel: $(GRAPH_ALIGN_PERMSET_PAR_SRCS)
 
 # Build compute-betweenness-order
 compute-betweenness-order: $(COMPUTE_BETWEENNESS_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -fopenmp -o $@ $^ $(LDFLAGS)
+
+# Build re-alignment-parallel
+re-alignment-parallel: $(GRAPH_REALIGN_PAR_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -fopenmp -o $@ $^ $(LDFLAGS)
 
 # Clean up build files
