@@ -614,12 +614,14 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
             //int node_m2 = gm->nodes[j];
             if (node_m1 == node_m2) continue;
             
+#if 0
             int node_f1 = current_mapping[node_m1];
             int node_f2 = current_mapping[node_m2];
 	    
-            //double current_sim = calculate_node_similarity(metrics_m[node_m1], metrics_f[node_f1]) + calculate_node_similarity(metrics_m[node_m2], metrics_f[node_f2]);
+            double current_sim = calculate_node_similarity(metrics_m[node_m1], metrics_f[node_f1]) + calculate_node_similarity(metrics_m[node_m2], metrics_f[node_f2]);
             
-	    //double swapped_sim = calculate_node_similarity(metrics_m[node_m1], metrics_f[node_f2]) + calculate_node_similarity(metrics_m[node_m2], metrics_f[node_f1]);
+	    double swapped_sim = calculate_node_similarity(metrics_m[node_m1], metrics_f[node_f2]) + calculate_node_similarity(metrics_m[node_m2], metrics_f[node_f1]);
+#endif
             
             int delta = calculate_swap_delta(gm, gf, current_mapping, node_m1, node_m2);
                 
