@@ -15,7 +15,7 @@ LAPACK_LDFLAGS = -L$(LAPACK_LIB_DIR) -llapack -lblas -lgfortran $(LDFLAGS)
 LAPACK_INCLUDE_FLAGS = $(INCLUDE_FLAGS) -I$(LAPACK_INCLUDE_DIR)
 
 # Targets for each executable
-TARGETS = analyze-graph transform-male-female-VNC-inputs transform-solution convert-VNC-matching \
+TARGETS = analyze-graph verify-mapping transform-male-female-VNC-inputs transform-solution convert-VNC-matching \
 	score-matching identity-match spectral-match greedy-match greedy-feature-match \
 	refine-matching-hillclimb refine-twohop graph-alignment graph-alignment-optimized graph-alignment-optimized-parallel \
 	graph-alignment-permset-parallel \
@@ -23,6 +23,7 @@ TARGETS = analyze-graph transform-male-female-VNC-inputs transform-solution conv
 
 # Source files for each program
 ANALYZE_GRAPH_SRCS  = analyze-graph.c
+VERIFY_MAPPING_SRCS = verify-mapping.c
 TRANSFORM_SRCS      = transform-male-female-VNC-inputs.c
 TRANSFORM_SOLN_SRCS = transform-solution.c
 CONVERT_VNC_SRCS    = convert-VNC-matching.c
@@ -45,6 +46,10 @@ all: $(TARGETS)
 
 # Analyze a connectome graph
 analyze-graph: $(ANALYZE_GRAPH_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
+
+# Verify a mapping file
+verify-mapping: $(VERIFY_MAPPING_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
 
 # Transform VNC male and female input graphs and matching to gm and gf

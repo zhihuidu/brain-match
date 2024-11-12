@@ -4,6 +4,7 @@ Match two Connectome brain graphs.
 This contains several helper programs as well:
 
 **analyze-graph**: Analyze an input graph \
+**verify-mapping**: Verifies a mapping file \
 **transform-male-female-VNC-inputs**: Convert the VNC Connectome male and female graphs and matching file into generic graphs \
 **transform-solution**: Convert a solution matching into a VNC Connectome male and female solution file \
 **convert-VNC-matching**: Convert the VNC Connectome matching solution into a generic one \
@@ -32,7 +33,8 @@ This contains several helper programs as well:
 % // transform-solution new-matching.csv
 % graph-alignment-optimized gm.csv gf.csv gm_12818795_finetune.csv gf_4322180_finetune.csv matching.csv new-matching-mf.csv
 % convert-VNC-matching new-matching-mf.csv
-% score-matching  gm.csv gf.csv new-matching-mf_generic.csv
+% verify-matching vnc_matching_submission_benchmark_5154247_generic.csv new-matching-mf_generic.csv
+% score-matching gm.csv gf.csv new-matching-mf_generic.csv
 ```
 
 David A. Bader
