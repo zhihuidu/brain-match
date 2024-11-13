@@ -565,12 +565,12 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
     
     int current_score = calculate_alignment_score(gm, gf, current_mapping);
     int best_score=current_score;
+    memcpy(best_mapping, current_mapping, sizeof(int) * (max_node + 1));
     int outer_node_count = 0;
     int improvements = 0;
-    memcpy(best_mapping, current_mapping, sizeof(int) * (max_node + 1));
-    random_swap_k_vertices(current_mapping,  max_node,  50,improvements);
-    current_score = calculate_alignment_score(gm, gf, current_mapping);
     time_t start_time = time(NULL);
+    random_swap_k_vertices(current_mapping,  max_node,  50, (int)start_time);
+    current_score = calculate_alignment_score(gm, gf, current_mapping);
     int pass=0;
     int last=0;
     LOG_INFO("Starting optimization with initial score: %s", format_number(current_score));
@@ -595,6 +595,8 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
             LOG_INFO("  - Current best score: %s", format_number(best_score));
             LOG_INFO("  - Improvements found: %s", format_number(improvements));
             LOG_INFO("  - Processing speed: %.1f nodes/sec", nodes_per_sec);
+            LOG_INFO("  - Estimated time remaining: %.1f minutes",
+                    (NUM_NODES - outer_node_count) / nodes_per_sec / 60);
         }
         
 	/*
@@ -612,14 +614,12 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
             //int node_m2 = gm->nodes[j];
             if (node_m1 == node_m2) continue;
             
-#if 0
             int node_f1 = current_mapping[node_m1];
             int node_f2 = current_mapping[node_m2];
 	    
-            double current_sim = calculate_node_similarity(metrics_m[node_m1], metrics_f[node_f1]) + calculate_node_similarity(metrics_m[node_m2], metrics_f[node_f2]);
+            //double current_sim = calculate_node_similarity(metrics_m[node_m1], metrics_f[node_f1]) + calculate_node_similarity(metrics_m[node_m2], metrics_f[node_f2]);
             
-	    double swapped_sim = calculate_node_similarity(metrics_m[node_m1], metrics_f[node_f2]) + calculate_node_similarity(metrics_m[node_m2], metrics_f[node_f1]);
-#endif
+	    //double swapped_sim = calculate_node_similarity(metrics_m[node_m1], metrics_f[node_f2]) + calculate_node_similarity(metrics_m[node_m2], metrics_f[node_f1]);
             
             int delta = calculate_swap_delta(gm, gf, current_mapping, node_m1, node_m2);
                 
@@ -667,15 +667,21 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
         pass++;
 	if (pass >3 && improvements-last==0 ) { 
 		pass=0;
-                LOG_DEBUG("Randomly shuffle 100 vertices");
-                random_swap_k_vertices(current_mapping,  max_node,  100,improvements);
+                time_t current_time = time(NULL);
+                double elapsed = difftime(current_time, start_time);
+                LOG_INFO("Elapsed time is %f ",elapsed);
+                LOG_INFO("Randomly shuffle 100 vertices");
+                random_swap_k_vertices(current_mapping,  max_node,  100,(int)current_time);
                 current_score = calculate_alignment_score(gm, gf, current_mapping);
+		improvements=0;
+		last=0;
 	} 
 	if (last<improvements) {
 		last=improvements;
 	}
     }
     
+    memcpy(best_mapping, current_mapping, sizeof(int) * (max_node + 1));
     time_t end_time = time(NULL);
     LOG_INFO("Optimization completed:");
     LOG_INFO("  - Final score: %s", format_number(best_score));
