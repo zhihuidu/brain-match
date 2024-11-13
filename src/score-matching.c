@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <time.h>
+#include <ctype.h>
 
 // Error codes
 #define SUCCESS 0
@@ -16,6 +17,7 @@
 #define INITIAL_GRAPH_SIZE 1024
 #define LOAD_FACTOR_THRESHOLD 0.7
 #define PROGRESS_INTERVAL 10000
+#define MAX_LINE_LENGTH 1024
 
 // Forward declarations of all structures
 typedef struct EdgeNode EdgeNode;
@@ -356,6 +358,29 @@ int add_edge(Graph* graph, int source, int target, int weight) {
     return SUCCESS;
 }
 
+int parse_vertex_id(const char* str) {
+    // Skip whitespace
+    while (isspace(*str)) str++;
+    
+    // Handle optional 'm' or 'f' prefix
+    if (*str == 'm' || *str == 'f') {
+        str++;  // Skip the prefix
+        // Skip any additional characters that might separate prefix from number
+        while (*str && !isdigit(*str)) str++;
+    }
+    
+    // Convert to integer
+    char* endptr;
+    long id = strtol(str, &endptr, 10);
+    
+    // Validate conversion
+    if (endptr == str || *endptr != '\0' || id < 0 || id > INT_MAX) {
+        return -1;
+    }
+    
+    return (int)id;
+}
+
 int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
     print_timestamp("Loading graph");
     fprintf(stderr, "Reading from file: %s\n", filename);
@@ -363,7 +388,7 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
     FILE* file = fopen(filename, "r");
     if (!file) return ERROR_FILE_OPEN;
     
-    char line[1024];
+    char line[MAX_LINE_LENGTH];
     size_t line_count = 0;
     size_t edge_count = 0;
     
@@ -372,6 +397,7 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
     
     fprintf(stderr, "Found %zu lines in file\n", line_count);
     
+    // Skip header
     if (!fgets(line, sizeof(line), file)) {
         fclose(file);
         return ERROR_INVALID_INPUT;
@@ -385,8 +411,17 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
             print_progress(processed, line_count, "Loading graph edges");
         }
         
-        int src, tgt, weight;
-        if (sscanf(line, "%d,%d,%d", &src, &tgt, &weight) != 3) continue;
+        // Parse line into components
+        char src_str[MAX_LINE_LENGTH], tgt_str[MAX_LINE_LENGTH];
+        int weight;
+        
+        if (sscanf(line, "%[^,],%[^,],%d", src_str, tgt_str, &weight) != 3) continue;
+        
+        // Parse vertex IDs
+        int src = parse_vertex_id(src_str);
+        int tgt = parse_vertex_id(tgt_str);
+        
+        if (src < 0 || tgt < 0) continue;  // Skip invalid vertex IDs
         
         int src_idx = get_or_create_vertex_index(vmap, src);
         int tgt_idx = get_or_create_vertex_index(vmap, tgt);
@@ -396,6 +431,7 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
             return ERROR_MEMORY_ALLOC;
         }
         
+        // Resize graph if necessary
         if (src_idx >= graph->num_vertices || tgt_idx >= graph->num_vertices) {
             size_t new_size = (src_idx > tgt_idx ? src_idx : tgt_idx) + 1;
             EdgeNode** new_lists = realloc(graph->adjacency_lists, 
@@ -435,11 +471,10 @@ int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t m
         matching[i] = -1;
     }
     
-    char line[1024];
+    char line[MAX_LINE_LENGTH];
     size_t line_count = 0;
     size_t matches = 0;
     
-    // Count lines for progress reporting
     while (fgets(line, sizeof(line), file)) line_count++;
     rewind(file);
     
@@ -459,8 +494,13 @@ int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t m
             print_progress(processed, line_count, "Loading matches");
         }
         
-        int id1, id2;
-        if (sscanf(line, "%d,%d", &id1, &id2) != 2) continue;
+        char id1_str[MAX_LINE_LENGTH], id2_str[MAX_LINE_LENGTH];
+        if (sscanf(line, "%[^,],%[^\n]", id1_str, id2_str) != 2) continue;
+        
+        int id1 = parse_vertex_id(id1_str);
+        int id2 = parse_vertex_id(id2_str);
+        
+        if (id1 < 0 || id2 < 0) continue;  // Skip invalid vertex IDs
         
         int idx1 = get_or_create_vertex_index(vmap, id1);
         int idx2 = get_or_create_vertex_index(vmap, id2);
