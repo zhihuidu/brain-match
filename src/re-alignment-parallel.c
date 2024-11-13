@@ -492,7 +492,9 @@ void save_intermediate_mapping(const char* filename, int* mapping, int max_node,
     }
 }
 
-void random_swap_k_vertices(int* mapping, int n, int k) {
+
+
+void random_swap_k_vertices(int* mapping, int n, int k,int seed) {
     // Create array for tracking selected vertices
     int* selected = (int*)malloc(k * sizeof(int));
     int* new_positions = (int*)malloc(k * sizeof(int));
@@ -500,6 +502,7 @@ void random_swap_k_vertices(int* mapping, int n, int k) {
 
     // Randomly select k vertices
     int count = 0;
+    srand(seed);
     while (count < k) {
         int idx = rand() % n;
         if (!used[idx]) {
@@ -525,18 +528,16 @@ void random_swap_k_vertices(int* mapping, int n, int k) {
 
     // Store original values
     int* original_values = (int*)malloc(k * sizeof(int));
+    int* new_values = (int*)malloc(k * sizeof(int));
     for (int i = 0; i < k; i++) {
         original_values[i] = mapping[selected[i]];
+        new_values[i] = mapping[new_positions[i]];
+
     }
 
-    // Perform the swaps
     for (int i = 0; i < k; i++) {
-        mapping[selected[i]] = mapping[new_positions[i]];
-    }
-
-    // Place original values in new positions
-    for (int i = 0; i < k; i++) {
-        mapping[new_positions[i]] = original_values[i];
+        mapping[selected[i]] = new_values[i];
+	mapping[new_positions[i]]=original_values[i];
     }
 
     // Clean up
@@ -544,9 +545,8 @@ void random_swap_k_vertices(int* mapping, int n, int k) {
     free(new_positions);
     free(used);
     free(original_values);
+    free(new_values);
 }
-
-
 
 // Function to optimize mapping
 int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
@@ -568,7 +568,7 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
     int outer_node_count = 0;
     int improvements = 0;
     memcpy(best_mapping, current_mapping, sizeof(int) * (max_node + 1));
-    random_swap_k_vertices(current_mapping,  max_node,  50);
+    random_swap_k_vertices(current_mapping,  max_node,  50,improvements);
     current_score = calculate_alignment_score(gm, gf, current_mapping);
     time_t start_time = time(NULL);
     int pass=0;
@@ -595,8 +595,6 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
             LOG_INFO("  - Current best score: %s", format_number(best_score));
             LOG_INFO("  - Improvements found: %s", format_number(improvements));
             LOG_INFO("  - Processing speed: %.1f nodes/sec", nodes_per_sec);
-            LOG_INFO("  - Estimated time remaining: %.1f minutes",
-                    (NUM_NODES - outer_node_count) / nodes_per_sec / 60);
         }
         
 	/*
@@ -670,7 +668,7 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
 	if (pass >3 && improvements-last==0 ) { 
 		pass=0;
                 LOG_DEBUG("Randomly shuffle 100 vertices");
-                random_swap_k_vertices(current_mapping,  max_node,  100);
+                random_swap_k_vertices(current_mapping,  max_node,  100,improvements);
                 current_score = calculate_alignment_score(gm, gf, current_mapping);
 	} 
 	if (last<improvements) {
