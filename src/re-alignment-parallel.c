@@ -7,7 +7,7 @@
 #include <omp.h>
 
 #define SAVE_INTERVAL 4200
-#define UPDATE_INTERVAL 800
+#define UPDATE_INTERVAL 4000
 #define MAX_LINE_LENGTH 1024
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
@@ -492,18 +492,18 @@ void save_intermediate_mapping(const char* filename, int* mapping, int max_node,
     }
 }
 
-
-
-void random_swap_k_vertices(int* mapping, int n, int k,int seed) {
+void random_swap_k_vertices(int* mapping, int n, int k) {
     // Create array for tracking selected vertices
-    int* selected = (int*)malloc(k * sizeof(int));
-    int* new_positions = (int*)malloc(k * sizeof(int));
+    int* selected = (int*)malloc(2*k * sizeof(int));
     int* used = (int*)calloc(n, sizeof(int));  // Track used positions
 
+    if (k*2>n) {
+            LOG_ERROR("K is too big : %d",k); 
+    } 
     // Randomly select k vertices
     int count = 0;
-    srand(seed);
-    while (count < k) {
+    srand(time(NULL));
+    while (count < k*2) {
         int idx = rand() % n;
         if (!used[idx]) {
             selected[count] = idx;
@@ -512,41 +512,32 @@ void random_swap_k_vertices(int* mapping, int n, int k,int seed) {
         }
     }
 
-    // Reset used array for new positions
-    memset(used, 0, n * sizeof(int));
-
-    // For each selected vertex, choose a new random position
-    for (int i = 0; i < k; i++) {
-        int new_pos;
-        do {
-            new_pos = rand() % n;
-        } while (used[new_pos]);  // Ensure position hasn't been used
-
-        new_positions[i] = new_pos;
-        used[new_pos] = 1;
-    }
-
     // Store original values
-    int* original_values = (int*)malloc(k * sizeof(int));
-    int* new_values = (int*)malloc(k * sizeof(int));
-    for (int i = 0; i < k; i++) {
+    int* original_values = (int*)malloc(2*k * sizeof(int));
+    for (int i = 0; i <2* k; i++) {
         original_values[i] = mapping[selected[i]];
-        new_values[i] = mapping[new_positions[i]];
+	//printf("original %d->%d\n",selected[i],original_values[i]);
+	//printf("new pos  %d->%d\n",new_positions[i],new_values[i]);
 
     }
 
+    //printf("After Swap\n");
+    //printf("============================\n");
+    // Perform the swaps
     for (int i = 0; i < k; i++) {
-        mapping[selected[i]] = new_values[i];
-	mapping[new_positions[i]]=original_values[i];
+        mapping[selected[i]] = original_values[i+k];
+        mapping[selected[i+k]] = original_values[i];
+	//printf("original %d->%d\n",selected[i],new_values[i]);
+	//printf("new pos  %d->%d\n",new_positions[i],original_values[i]);
     }
 
     // Clean up
     free(selected);
-    free(new_positions);
     free(used);
     free(original_values);
-    free(new_values);
 }
+
+
 
 // Function to optimize mapping
 int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
@@ -569,7 +560,7 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
     int outer_node_count = 0;
     int improvements = 0;
     time_t start_time = time(NULL);
-    random_swap_k_vertices(current_mapping,  max_node,  50, (int)start_time);
+    random_swap_k_vertices(current_mapping,  max_node,  50 );
     current_score = calculate_alignment_score(gm, gf, current_mapping);
     int pass=0;
     int last=0;
@@ -595,8 +586,6 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
             LOG_INFO("  - Current best score: %s", format_number(best_score));
             LOG_INFO("  - Improvements found: %s", format_number(improvements));
             LOG_INFO("  - Processing speed: %.1f nodes/sec", nodes_per_sec);
-            LOG_INFO("  - Estimated time remaining: %.1f minutes",
-                    (NUM_NODES - outer_node_count) / nodes_per_sec / 60);
         }
         
 	/*
@@ -610,7 +599,7 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
 	int maxv=-1;
         //#pragma omp parallel for reduction(+:improvements) schedule(dynamic)
         #pragma omp parallel for shared (maxdelta,maxv) schedule(dynamic)
-        for (int node_m2=1; node_m2<=NUM_NODES; node_m2++) {
+        for (int node_m2=node_m1+1; node_m2<=NUM_NODES; node_m2++) {
             //int node_m2 = gm->nodes[j];
             if (node_m1 == node_m2) continue;
             
@@ -646,6 +635,10 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
 		    if (current_score > best_score) {
                           memcpy(best_mapping, current_mapping, sizeof(int) * (max_node + 1));
 			  best_score=current_score;
+                          LOG_INFO("Saving Best Matching");
+                          LOG_INFO("  - Current score: %s", format_number(current_score));
+                          LOG_INFO("  - Current best score: %s", format_number(best_score));
+                          LOG_INFO("  - Write to mapping file")
                           save_intermediate_mapping(out_path, best_mapping, max_node, 
                                    gm, gf, best_score);
 		    }
@@ -665,16 +658,20 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
         }
     }
         pass++;
-	if (pass >3 && improvements-last==0 ) { 
-		pass=0;
+	if (pass >2 && improvements-last==0 ) { 
                 time_t current_time = time(NULL);
                 double elapsed = difftime(current_time, start_time);
-                LOG_INFO("Elapsed time is %f ",elapsed);
-                LOG_INFO("Randomly shuffle 100 vertices");
-                random_swap_k_vertices(current_mapping,  max_node,  100,(int)current_time);
+		int shuffle=200;
+                LOG_INFO("Restart Optimization from a perturbation of the best configuration ");
+                LOG_INFO("  - Elapsed time is %f ",elapsed);
+                LOG_INFO("  - Without Progress in %d passes ",pass);
+                LOG_INFO("  - Randomly shuffle %d vertices",shuffle);
+                memcpy(current_mapping, best_mapping, sizeof(int) * (max_node + 1));
+                random_swap_k_vertices(current_mapping,  max_node,  shuffle);
                 current_score = calculate_alignment_score(gm, gf, current_mapping);
 		improvements=0;
 		last=0;
+		pass=0;
 	} 
 	if (last<improvements) {
 		last=improvements;
