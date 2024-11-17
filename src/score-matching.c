@@ -89,24 +89,24 @@ void print_timestamp(const char* message) {
     time(&now);
     char* time_str = ctime(&now);
     time_str[strlen(time_str) - 1] = '\0';
-    fprintf(stderr, "[%s] %s\n", time_str, message);
+    fprintf(stdout, "[%s] %s\n", time_str, message);
 }
 
 void print_progress(size_t current, size_t total, const char* task) {
     if (total == 0) return;
     float percentage = (float)current * 100 / total;
-    fprintf(stderr, "\r%s: %.1f%% (%zu/%zu)", task, percentage, current, total);
-    if (current == total) fprintf(stderr, "\n");
-    fflush(stderr);
+    fprintf(stdout, "\r%s: %.1f%% (%zu/%zu)", task, percentage, current, total);
+    if (current == total) fprintf(stdout, "\n");
+    fflush(stdout);
 }
 
 void print_memory_usage(const Graph* g1, const Graph* g2, const VertexMap* vmap, const char* stage) {
-    fprintf(stderr, "\nMemory usage after %s:\n", stage);
-    fprintf(stderr, "  Graph 1: %zu vertices, %zu edges\n", 
+    fprintf(stdout, "\nMemory usage after %s:\n", stage);
+    fprintf(stdout, "  Graph 1: %zu vertices, %zu edges\n", 
             g1 ? g1->num_vertices : 0, g1 ? g1->num_edges : 0);
-    fprintf(stderr, "  Graph 2: %zu vertices, %zu edges\n", 
+    fprintf(stdout, "  Graph 2: %zu vertices, %zu edges\n", 
             g2 ? g2->num_vertices : 0, g2 ? g2->num_edges : 0);
-    fprintf(stderr, "  Vertex map: %zu vertices mapped\n\n", 
+    fprintf(stdout, "  Vertex map: %zu vertices mapped\n\n", 
             vmap ? vmap->count : 0);
 }
 
@@ -362,19 +362,35 @@ int parse_vertex_id(const char* str) {
     // Skip whitespace
     while (isspace(*str)) str++;
     
-    // Handle optional 'm' or 'f' prefix
+    // Handle prefixes
     if (*str == 'm' || *str == 'f') {
         str++;  // Skip the prefix
-        // Skip any additional characters that might separate prefix from number
-        while (*str && !isdigit(*str)) str++;
     }
+    
+    // Skip any non-digit characters until we hit a digit or end of string
+    while (*str && !isdigit(*str)) str++;
+    
+    // If we ran out of characters or didn't find a digit, return error
+    if (*str == '\0' || !isdigit(*str)) {
+        return -1;
+    }
+    
+    // Convert to integer, but first create a clean string without trailing control chars
+    char cleaned[MAX_LINE_LENGTH];
+    size_t clean_idx = 0;
+    
+    // Copy only digits until we hit a non-digit or control character
+    while (*str && isdigit(*str) && clean_idx < MAX_LINE_LENGTH - 1) {
+        cleaned[clean_idx++] = *str++;
+    }
+    cleaned[clean_idx] = '\0';
     
     // Convert to integer
     char* endptr;
-    long id = strtol(str, &endptr, 10);
+    long id = strtol(cleaned, &endptr, 10);
     
-    // Validate conversion
-    if (endptr == str || *endptr != '\0' || id < 0 || id > INT_MAX) {
+    // Check for conversion errors
+    if (endptr == cleaned || id < 0 || id > INT_MAX) {
         return -1;
     }
     
@@ -383,7 +399,7 @@ int parse_vertex_id(const char* str) {
 
 int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
     print_timestamp("Loading graph");
-    fprintf(stderr, "Reading from file: %s\n", filename);
+    fprintf(stdout, "Reading from file: %s\n", filename);
     
     FILE* file = fopen(filename, "r");
     if (!file) return ERROR_FILE_OPEN;
@@ -395,7 +411,7 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
     while (fgets(line, sizeof(line), file)) line_count++;
     rewind(file);
     
-    fprintf(stderr, "Found %zu lines in file\n", line_count);
+    fprintf(stdout, "Found %zu lines in file\n", line_count);
     
     // Skip header
     if (!fgets(line, sizeof(line), file)) {
@@ -415,13 +431,20 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
         char src_str[MAX_LINE_LENGTH], tgt_str[MAX_LINE_LENGTH];
         int weight;
         
-        if (sscanf(line, "%[^,],%[^,],%d", src_str, tgt_str, &weight) != 3) continue;
+        // Read until commas for both vertex IDs
+        if (sscanf(line, "%[^,],%[^,],%d", src_str, tgt_str, &weight) != 3) {
+            fprintf(stdout, "Malformed line (skipping): %s", line);
+            continue;
+        }
         
-        // Parse vertex IDs
+        // Parse vertex IDs using flexible parser
         int src = parse_vertex_id(src_str);
         int tgt = parse_vertex_id(tgt_str);
         
-        if (src < 0 || tgt < 0) continue;  // Skip invalid vertex IDs
+        if (src < 0 || tgt < 0) {
+            fprintf(stdout, "Invalid vertex IDs (skipping): %s,%s\n", src_str, tgt_str);
+            continue;
+        }
         
         int src_idx = get_or_create_vertex_index(vmap, src);
         int tgt_idx = get_or_create_vertex_index(vmap, tgt);
@@ -441,6 +464,7 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
                 return ERROR_MEMORY_ALLOC;
             }
             
+            // Initialize new space
             for (size_t i = graph->num_vertices; i < new_size; i++) {
                 new_lists[i] = NULL;
             }
@@ -449,19 +473,23 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
             graph->num_vertices = new_size;
         }
         
+        // Add the edge
         if (add_edge(graph, src_idx, tgt_idx, weight) == SUCCESS) {
             edge_count++;
+        } else {
+            fprintf(stdout, "Failed to add edge: %d -> %d (weight: %d)\n", 
+                    src, tgt, weight);
         }
     }
     
     fclose(file);
-    fprintf(stderr, "\nSuccessfully loaded %zu edges\n", edge_count);
+    fprintf(stdout, "\nSuccessfully loaded %zu edges\n", edge_count);
     return SUCCESS;
 }
 
 int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t matching_size) {
     print_timestamp("Loading matching");
-    fprintf(stderr, "Reading matching from file: %s\n", filename);
+    fprintf(stdout, "Reading matching from file: %s\n", filename);
     
     FILE* file = fopen(filename, "r");
     if (!file) return ERROR_FILE_OPEN;
@@ -478,7 +506,7 @@ int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t m
     while (fgets(line, sizeof(line), file)) line_count++;
     rewind(file);
     
-    fprintf(stderr, "Found %zu lines in matching file\n", line_count);
+    fprintf(stdout, "Found %zu lines in matching file\n", line_count);
     
     // Skip header
     if (!fgets(line, sizeof(line), file)) {
@@ -495,12 +523,23 @@ int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t m
         }
         
         char id1_str[MAX_LINE_LENGTH], id2_str[MAX_LINE_LENGTH];
-        if (sscanf(line, "%[^,],%[^\n]", id1_str, id2_str) != 2) continue;
+        // Remove any trailing newline or whitespace
+        line[strcspn(line, "\n")] = 0;
         
+        if (sscanf(line, "%[^,],%[^\n]", id1_str, id2_str) != 2) {
+            fprintf(stdout, "Error parsing line: '%s'\n", line);
+            continue;
+        }
+        
+        // Parse IDs
         int id1 = parse_vertex_id(id1_str);
         int id2 = parse_vertex_id(id2_str);
         
-        if (id1 < 0 || id2 < 0) continue;  // Skip invalid vertex IDs
+        if (id1 < 0 || id2 < 0) {
+            fprintf(stdout, "Invalid vertex IDs in line '%s': '%s','%s' parsed as %d,%d\n", 
+                    line, id1_str, id2_str, id1, id2);
+            continue;
+        }
         
         int idx1 = get_or_create_vertex_index(vmap, id1);
         int idx2 = get_or_create_vertex_index(vmap, id2);
@@ -512,7 +551,7 @@ int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t m
     }
     
     fclose(file);
-    fprintf(stderr, "\nSuccessfully loaded %zu matches\n", matches);
+    fprintf(stdout, "\nSuccessfully loaded %zu matches\n", matches);
     return SUCCESS;
 }
 
@@ -559,7 +598,7 @@ int calculate_score_sparse(const Graph* g1, const Graph* g2, const int* matching
 
 int main(int argc, char* argv[]) {
     if (argc != 4) {
-        fprintf(stderr, "Usage: %s <g1.csv> <g2.csv> <matching.csv>\n", argv[0]);
+        fprintf(stdout, "Usage: %s <g1.csv> <g2.csv> <matching.csv>\n", argv[0]);
         return EXIT_FAILURE;
     }
     
@@ -572,7 +611,7 @@ int main(int argc, char* argv[]) {
     // Create vertex mapping
     VertexMap* vmap = create_vertex_map(INITIAL_HASH_SIZE);
     if (!vmap) {
-        fprintf(stderr, "Failed to create vertex map\n");
+        fprintf(stdout, "Failed to create vertex map\n");
         return EXIT_FAILURE;
     }
     
@@ -580,7 +619,7 @@ int main(int argc, char* argv[]) {
     Graph* g1 = create_graph(INITIAL_GRAPH_SIZE);
     Graph* g2 = create_graph(INITIAL_GRAPH_SIZE);
     if (!g1 || !g2) {
-        fprintf(stderr, "Failed to create graphs\n");
+        fprintf(stdout, "Failed to create graphs\n");
         free_vertex_map(vmap);
         free_graph(g1);
         free_graph(g2);
@@ -591,7 +630,7 @@ int main(int argc, char* argv[]) {
     print_memory_usage(g1, g2, vmap, "initial creation");
     int result = load_graph_sparse(g1_filename, g1, vmap);
     if (result != SUCCESS) {
-        fprintf(stderr, "Failed to load first graph: error %d\n", result);
+        fprintf(stdout, "Failed to load first graph: error %d\n", result);
         free_vertex_map(vmap);
         free_graph(g1);
         free_graph(g2);
@@ -603,7 +642,7 @@ int main(int argc, char* argv[]) {
     // Load second graph
     result = load_graph_sparse(g2_filename, g2, vmap);
     if (result != SUCCESS) {
-        fprintf(stderr, "Failed to load second graph: error %d\n", result);
+        fprintf(stdout, "Failed to load second graph: error %d\n", result);
         free_vertex_map(vmap);
         free_graph(g1);
         free_graph(g2);
@@ -616,7 +655,7 @@ int main(int argc, char* argv[]) {
     print_timestamp("Allocating matching array");
     int* matching = calloc(vmap->count, sizeof(int));
     if (!matching) {
-        fprintf(stderr, "Failed to allocate matching array\n");
+        fprintf(stdout, "Failed to allocate matching array\n");
         free_vertex_map(vmap);
         free_graph(g1);
         free_graph(g2);
@@ -626,7 +665,7 @@ int main(int argc, char* argv[]) {
     // Load matching
     result = load_matching(matching_filename, vmap, matching, vmap->count);
     if (result != SUCCESS) {
-        fprintf(stderr, "Failed to load matching: error %d\n", result);
+        fprintf(stdout, "Failed to load matching: error %d\n", result);
         free_vertex_map(vmap);
         free_graph(g1);
         free_graph(g2);
@@ -635,9 +674,9 @@ int main(int argc, char* argv[]) {
     }
     
     print_timestamp("Starting score calculation");
-    fprintf(stderr, "Processing graphs with:\n");
-    fprintf(stderr, "  Graph 1: %zu vertices and %zu edges\n", g1->num_vertices, g1->num_edges);
-    fprintf(stderr, "  Graph 2: %zu vertices and %zu edges\n", g2->num_vertices, g2->num_edges);
+    fprintf(stdout, "Processing graphs with:\n");
+    fprintf(stdout, "  Graph 1: %zu vertices and %zu edges\n", g1->num_vertices, g1->num_edges);
+    fprintf(stdout, "  Graph 2: %zu vertices and %zu edges\n", g2->num_vertices, g2->num_edges);
     
     // Calculate and print score
     int score = calculate_score_sparse(g1, g2, matching);
@@ -645,7 +684,7 @@ int main(int argc, char* argv[]) {
         print_timestamp("Calculation complete");
         printf("%d\n", score);
     } else {
-        fprintf(stderr, "Error calculating score\n");
+        fprintf(stdout, "Error calculating score\n");
         free_vertex_map(vmap);
         free_graph(g1);
         free_graph(g2);
