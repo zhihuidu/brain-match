@@ -8,10 +8,11 @@
 
 #define MAX_LINE_LENGTH 1024
 #define NUM_NODES 18524
-#define GROUP_SIZE 6
+#define GROUP_SIZE 4
 #define NUM_SAMPLES 0 /* Set to 0 to enumerate all permutations */
 #define MAX_NODES 100000
 #define SAVE_INTERVAL 25
+#define PRINT_ITER 0
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
 // Structure definitions (same as before)
@@ -594,7 +595,6 @@ int** generate_permutation_samples(int n, int num_samples, int* total_samples) {
     }
 }
 
-// Modified optimization function
 void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* out_path) {
     int current_score = calculate_alignment_score(gm, gf, current_mapping);
     ProgressStats* stats = init_progress_stats(current_score);
@@ -624,9 +624,13 @@ void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* ou
     
     while (1) {
         // Generate multiple random vertex groups
+#if PRINT_ITER
         printf("\nIteration %d:\n", stats->total_iterations + 1);
+#endif
         for(int g = 0; g < NUM_GROUPS; g++) {
+#if PRINT_ITER
             printf("Group %d vertices:", g);
+#endif
             // Generate unique vertices for this group
             for (int i = 0; i < GROUP_SIZE; i++) {
                 int new_vertex;
@@ -634,9 +638,13 @@ void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* ou
                     new_vertex = 1 + rand() % NUM_NODES;
                 } while (has_duplicate(groups[g].vertices, i, new_vertex));
                 groups[g].vertices[i] = new_vertex;
+#if PRINT_ITER
                 printf(" %d", new_vertex);
+#endif
             }
+#if PRINT_ITER
             printf("\n");
+#endif
         }
         
         // Evaluate all groups in parallel
@@ -681,29 +689,45 @@ void optimize_mapping(Graph* gm, Graph* gf, int* current_mapping, const char* ou
         
         // Apply best improvement if found
         if(best_delta > 0) {
+            // Apply the permutation
             apply_best_permutation(gm, gf, current_mapping,
                                  groups[best_group].vertices,
                                  groups[best_group].best_permutation,
                                  GROUP_SIZE);
             
-            // Verify new score
+            // Verify the actual new score
             int new_score = calculate_alignment_score(gm, gf, current_mapping);
             
-            update_progress_stats(stats, best_delta, true);
-            printf("\nApplied permutation from group %d:\n", best_group);
-            printf("  - Delta: %d\n", best_delta);
-            printf("  - New score: %d\n", new_score);
-            
-            // Save immediately with score in filename
-            char timestamp_filename[512];
-            time_t now = time(NULL);
-            struct tm *t = localtime(&now);
-            sprintf(timestamp_filename, "%s_score_%d_%04d%02d%02d_%02d%02d%02d.csv", 
-                    out_path, new_score,
-                    t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                    t->tm_hour, t->tm_min, t->tm_sec);
-            
-            save_mapping(timestamp_filename, current_mapping, new_score);
+            if (new_score > current_score) {
+                update_progress_stats(stats, best_delta, true);
+                printf("\nApplied permutation from group %d:\n", best_group);
+                printf("  - Delta: %d\n", best_delta);
+                printf("  - New score: %d\n", new_score);
+                
+                // Save with score in filename
+                char timestamp_filename[512];
+                char clean_path[256];
+                strcpy(clean_path, "improved_mapping"); // Use a generic base name
+                time_t now = time(NULL);
+                struct tm *t = localtime(&now);
+                sprintf(timestamp_filename, "%s_score_%d_%04d%02d%02d_%02d%02d%02d.csv", 
+                        clean_path, new_score,
+                        t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                        t->tm_hour, t->tm_min, t->tm_sec);
+                
+                save_mapping(timestamp_filename, current_mapping, new_score);
+                current_score = new_score;
+            } else {
+                // Revert the permutation since it didn't actually improve the score
+                int temp[GROUP_SIZE];
+                for (int i = 0; i < GROUP_SIZE; i++) {
+                    temp[i] = current_mapping[groups[best_group].vertices[groups[best_group].best_permutation[i]]];
+                }
+                for (int i = 0; i < GROUP_SIZE; i++) {
+                    current_mapping[groups[best_group].vertices[i]] = temp[i];
+                }
+                update_progress_stats(stats, 0, false);
+            }
         } else {
             update_progress_stats(stats, 0, false);
         }
