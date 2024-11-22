@@ -1,11 +1,12 @@
 # Compiler and flags
 CC = gcc
 CFLAGS = -O3 -Wall
+MPICC = mpicc
 
 
 # Directories for LAPACK/BLAS (update these if needed)
-LAPACK_INCLUDE_DIR ?=  /project/bader/bader/lapack-3.12.0/build/include/
-LAPACK_LIB_DIR ?= /project/bader/bader/lapack-3.12.0/build/lib/
+LAPACK_INCLUDE_DIR ?=  /scratch/users/zhihui/lapack-3.12.0/build/include/
+LAPACK_LIB_DIR ?= /scratch/users/zhihui/lapack-3.12.0/build/lib/
 
 INCLUDE_FLAGS ?=
 LDFLAGS =  -lm
@@ -19,6 +20,7 @@ TARGETS = analyze-graph verify-mapping transform-male-female-VNC-inputs transfor
 	score-matching identity-match spectral-match greedy-match greedy-feature-match \
 	refine-matching-hillclimb refine-twohop graph-alignment graph-alignment-optimized graph-alignment-optimized-parallel \
 	graph-alignment-permset-parallel \
+	mpi-omp \
 	compute-betweenness-order re-alignment-parallel
 
 # Source files for each program
@@ -40,6 +42,7 @@ GRAPH_ALIGN_OPT_PAR_SRCS    = graph-alignment-optimized-parallel.c
 GRAPH_ALIGN_PERMSET_PAR_SRCS    = graph-alignment-permset-parallel.c
 COMPUTE_BETWEENNESS_SRCS    = compute-betweenness-order.c
 GRAPH_REALIGN_PAR_SRCS    = re-alignment-parallel.c
+GRAPH_MPI_PAR_SRCS    = mpi-omp.c
 
 
 # Default target to build all programs
@@ -116,6 +119,10 @@ compute-betweenness-order: $(COMPUTE_BETWEENNESS_SRCS)
 # Build re-alignment-parallel
 re-alignment-parallel: $(GRAPH_REALIGN_PAR_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -fopenmp -o $@ $^ $(LDFLAGS)
+
+# Build re-alignment-parallel
+mpi-omp: $(GRAPH_MPI_PAR_SRCS)
+	$(MPICC) $(CFLAGS) $(INCLUDE_FLAGS) -fopenmp -o $@ $^ $(LDFLAGS)
 
 # Clean up build files
 clean:
