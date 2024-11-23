@@ -3,6 +3,8 @@ CC = gcc
 CFLAGS = -O3 -Wall
 MPICC = mpicc
 
+#Directories
+BEST_SWAP_DIR = best-swap/
 
 # Directories for LAPACK/BLAS (update these if needed)
 LAPACK_INCLUDE_DIR ?=  /scratch/users/zhihui/lapack-3.12.0/build/include/
@@ -21,7 +23,8 @@ TARGETS = analyze-graph verify-mapping transform-male-female-VNC-inputs transfor
 	refine-matching-hillclimb refine-twohop graph-alignment graph-alignment-optimized graph-alignment-optimized-parallel \
 	graph-alignment-permset-parallel \
 	graph-re-alignment-mpi-omp \
-	compute-betweenness-order re-alignment-parallel
+	compute-betweenness-order re-alignment-parallel \
+	score-lookup create-score-lookup
 
 # Source files for each program
 ANALYZE_GRAPH_SRCS  = analyze-graph.c
@@ -43,6 +46,8 @@ GRAPH_ALIGN_PERMSET_PAR_SRCS    = graph-alignment-permset-parallel.c
 COMPUTE_BETWEENNESS_SRCS    = compute-betweenness-order.c
 GRAPH_REALIGN_PAR_SRCS    = re-alignment-parallel.c
 GRAPH_MPI_PAR_SRCS    = graph-re-alignment-mpi-omp.c
+SCORE_LOOKUP_SRCS = $(BEST_SWAP_DIR)score_lookup.c $(BEST_SWAP_DIR)heap.c
+CREATE_SCORE_LOOKUP_SRCS = $(BEST_SWAP_DIR)create_score_lookup.c
 
 
 # Default target to build all programs
@@ -123,6 +128,12 @@ re-alignment-parallel: $(GRAPH_REALIGN_PAR_SRCS)
 # Build re-alignment-parallel
 graph-re-alignment-mpi-omp: $(GRAPH_MPI_PAR_SRCS)
 	$(MPICC) $(CFLAGS) $(INCLUDE_FLAGS) -fopenmp -o $@ $^ $(LDFLAGS)
+
+score-lookup: $(SCORE_LOOKUP_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
+
+create-score-lookup: $(CREATE_SCORE_LOOKUP_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
 
 # Clean up build files
 clean:
