@@ -24,7 +24,7 @@ TARGETS = analyze-graph verify-mapping transform-male-female-VNC-inputs transfor
 	graph-alignment-permset-parallel \
 	graph-re-alignment-mpi-omp \
 	compute-betweenness-order re-alignment-parallel \
-	score-lookup create-score-lookup
+	score-lookup create-score-lookup parallel-create-score-lookup
 
 # Source files for each program
 ANALYZE_GRAPH_SRCS  = analyze-graph.c
@@ -46,8 +46,9 @@ GRAPH_ALIGN_PERMSET_PAR_SRCS    = graph-alignment-permset-parallel.c
 COMPUTE_BETWEENNESS_SRCS    = compute-betweenness-order.c
 GRAPH_REALIGN_PAR_SRCS    = re-alignment-parallel.c
 GRAPH_MPI_PAR_SRCS    = graph-re-alignment-mpi-omp.c
-SCORE_LOOKUP_SRCS = $(BEST_SWAP_DIR)score_lookup.c $(BEST_SWAP_DIR)heap.c
-CREATE_SCORE_LOOKUP_SRCS = $(BEST_SWAP_DIR)create_score_lookup.c
+SCORE_LOOKUP_SRCS = $(BEST_SWAP_DIR)score-lookup.c $(BEST_SWAP_DIR)heap.c
+CREATE_SCORE_LOOKUP_SRCS = $(BEST_SWAP_DIR)create-score-lookup.c
+PARALLEL_CREATE_SCORE_LOOKUP_SRCS = $(BEST_SWAP_DIR)parallel-create-score-lookup.c
 
 
 # Default target to build all programs
@@ -133,6 +134,9 @@ score-lookup: $(SCORE_LOOKUP_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
 
 create-score-lookup: $(CREATE_SCORE_LOOKUP_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
+
+parallel-create-score-lookup: $(PARALLEL_CREATE_SCORE_LOOKUP_SRCS)
 	$(CC) $(CFLAGS) $(INCLUDE_FLAGS) -o $@ $^ $(LDFLAGS)
 
 # Clean up build files
