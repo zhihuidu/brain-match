@@ -10,7 +10,7 @@
 #include <mpi.h>
 
 // Add these constants
-#define SYNC_INTERVAL 3600  // Sync every 1 hour
+#define SYNC_INTERVAL 1800  // Sync every 1 hour
 #define TAG_SCORE 1
 #define TAG_MAPPING 2
 #define TAG_TERMINATE 3
@@ -83,6 +83,8 @@ void sync_best_solutions(int* best_mapping, int* best_score, int max_node) {
     if (rank == 0) {
         all_scores = (int*)malloc(size * sizeof(int));
     }
+
+    
     
     MPI_Gather(best_score, 1, MPI_INT, all_scores, 1, MPI_INT, 0, MPI_COMM_WORLD);
     
@@ -629,10 +631,22 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
 	// Check if it's time to sync
         time_t current_time = time(NULL);
         if (difftime(current_time, last_sync_time) >= SYNC_INTERVAL) {
-            LOG_INFO("Process %d, enter synchronization the best score is %d", rank,best_score);
-            sync_best_solutions(best_mapping, &best_score, max_node);
-            last_sync_time = current_time;
-            LOG_INFO("Process %d, after synchronization and best score is %d", rank,best_score);
+              LOG_INFO("Process %d, enter synchronization the best score is %d", rank,best_score);
+	      int* benchmark_mapping = load_benchmark_mapping("../data/best.csv", max_node);
+              if (!benchmark_mapping) {
+                  LOG_ERROR("Failed to load benchmark mapping");
+              }
+
+              int benchmark_score = calculate_alignment_score(gm, gf, benchmark_mapping);
+	      if (benchmark_score >best_score) {
+		      best_score=benchmark_score;
+                      memcpy(best_mapping, benchmark_mapping, sizeof(int) * (max_node + 1));
+	      }
+	      free(benchmark_mapping);
+
+              sync_best_solutions(best_mapping, &best_score, max_node);
+              last_sync_time = current_time;
+              LOG_INFO("Process %d, after synchronization and best score is %d", rank,best_score);
 
         }
 
@@ -710,15 +724,20 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
                     }
         }
     }
-    pass++;
+    if (last<improvements) {
+	last=improvements;
+	pass=0;
+    } else {
+        pass++;
+    }
     if (pass >2 && improvements-last==0 ) { 
                 time_t current_time = time(NULL);
                 double elapsed = difftime(current_time, start_time);
-		int shuffle=50;
+		int shuffle=3;
                 LOG_INFO("Process %d Restart Optimization from a perturbation of the best configuration ",rank);
                 LOG_INFO("  - Elapsed time is %f ",elapsed);
                 LOG_INFO("  - Without Progress in %d passes ",pass);
-                LOG_INFO("  - Randomly shuffle %d vertices",shuffle);
+                LOG_INFO("  - Randomly shuffle %d vertices",shuffle+rank);
                 memcpy(current_mapping, best_mapping, sizeof(int) * (max_node + 1));
                 random_swap_k_vertices(current_mapping,  max_node,  shuffle+rank, rank);
                 current_score = calculate_alignment_score(gm, gf, current_mapping);
@@ -726,9 +745,6 @@ int* optimize_mapping(Graph* gm, Graph* gf, int* initial_mapping,
 		last=0;
 		pass=0;
     } 
-    if (last<improvements) {
-		last=improvements;
-    }
     }// end of while loop
     
     memcpy(best_mapping, current_mapping, sizeof(int) * (max_node + 1));
