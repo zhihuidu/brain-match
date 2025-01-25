@@ -1,4 +1,3 @@
-# brain-match
 Match two Connectome brain graphs.
 
 This contains several helper programs as well:
