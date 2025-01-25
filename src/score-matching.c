@@ -398,8 +398,8 @@ int parse_vertex_id(const char* str) {
 }
 
 int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
-    print_timestamp("Loading graph");
-    fprintf(stdout, "Reading from file: %s\n", filename);
+    //print_timestamp("Loading graph");
+    //fprintf(stdout, "Reading from file: %s\n", filename);
     
     FILE* file = fopen(filename, "r");
     if (!file) return ERROR_FILE_OPEN;
@@ -411,7 +411,7 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
     while (fgets(line, sizeof(line), file)) line_count++;
     rewind(file);
     
-    fprintf(stdout, "Found %zu lines in file\n", line_count);
+    //fprintf(stdout, "Found %zu lines in file\n", line_count);
     
     // Skip header
     if (!fgets(line, sizeof(line), file)) {
@@ -424,7 +424,7 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
     while (fgets(line, sizeof(line), file)) {
         processed++;
         if (processed % PROGRESS_INTERVAL == 0) {
-            print_progress(processed, line_count, "Loading graph edges");
+            //print_progress(processed, line_count, "Loading graph edges");
         }
         
         // Parse line into components
@@ -483,13 +483,13 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
     }
     
     fclose(file);
-    fprintf(stdout, "\nSuccessfully loaded %zu edges\n", edge_count);
+    //fprintf(stdout, "\nSuccessfully loaded %zu edges\n", edge_count);
     return SUCCESS;
 }
 
 int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t matching_size) {
-    print_timestamp("Loading matching");
-    fprintf(stdout, "Reading matching from file: %s\n", filename);
+    //print_timestamp("Loading matching");
+    //fprintf(stdout, "Reading matching from file: %s\n", filename);
     
     FILE* file = fopen(filename, "r");
     if (!file) return ERROR_FILE_OPEN;
@@ -506,7 +506,7 @@ int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t m
     while (fgets(line, sizeof(line), file)) line_count++;
     rewind(file);
     
-    fprintf(stdout, "Found %zu lines in matching file\n", line_count);
+    //fprintf(stdout, "Found %zu lines in matching file\n", line_count);
     
     // Skip header
     if (!fgets(line, sizeof(line), file)) {
@@ -519,7 +519,7 @@ int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t m
     while (fgets(line, sizeof(line), file)) {
         processed++;
         if (processed % PROGRESS_INTERVAL == 0) {
-            print_progress(processed, line_count, "Loading matches");
+            //print_progress(processed, line_count, "Loading matches");
         }
         
         char id1_str[MAX_LINE_LENGTH], id2_str[MAX_LINE_LENGTH];
@@ -551,12 +551,12 @@ int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t m
     }
     
     fclose(file);
-    fprintf(stdout, "\nSuccessfully loaded %zu matches\n", matches);
+    //fprintf(stdout, "\nSuccessfully loaded %zu matches\n", matches);
     return SUCCESS;
 }
 
 int calculate_score_sparse(const Graph* g1, const Graph* g2, const int* matching) {
-    print_timestamp("Calculating matching alignment score");
+    //print_timestamp("Calculating matching alignment score");
     
     if (!g1 || !g2 || !matching) return -1;
     
@@ -570,7 +570,7 @@ int calculate_score_sparse(const Graph* g1, const Graph* g2, const int* matching
         while (edge1) {
             processed_edges++;
             if (processed_edges % PROGRESS_INTERVAL == 0) {
-                print_progress(processed_edges, total_edges, "Computing alignment");
+                //print_progress(processed_edges, total_edges, "Computing alignment");
             }
             
             int source_g2 = matching[i];
@@ -592,7 +592,7 @@ int calculate_score_sparse(const Graph* g1, const Graph* g2, const int* matching
         }
     }
     
-    print_timestamp("Alignment score calculation complete");
+    //print_timestamp("Alignment score calculation complete");
     return alignment_score;
 }
 
@@ -602,7 +602,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
     
-    print_timestamp("Starting graph matching program");
+    //print_timestamp("Starting graph matching program");
     
     const char* g1_filename = argv[1];
     const char* g2_filename = argv[2];
@@ -627,7 +627,7 @@ int main(int argc, char* argv[]) {
     }
     
     // Load first graph
-    print_memory_usage(g1, g2, vmap, "initial creation");
+    //print_memory_usage(g1, g2, vmap, "initial creation");
     int result = load_graph_sparse(g1_filename, g1, vmap);
     if (result != SUCCESS) {
         fprintf(stdout, "Failed to load first graph: error %d\n", result);
@@ -637,7 +637,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
     
-    print_memory_usage(g1, g2, vmap, "loading first graph");
+    //print_memory_usage(g1, g2, vmap, "loading first graph");
     
     // Load second graph
     result = load_graph_sparse(g2_filename, g2, vmap);
@@ -649,10 +649,10 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
     
-    print_memory_usage(g1, g2, vmap, "loading second graph");
+    //print_memory_usage(g1, g2, vmap, "loading second graph");
     
     // Create and initialize matching array
-    print_timestamp("Allocating matching array");
+    //print_timestamp("Allocating matching array");
     int* matching = calloc(vmap->count, sizeof(int));
     if (!matching) {
         fprintf(stdout, "Failed to allocate matching array\n");
@@ -672,16 +672,16 @@ int main(int argc, char* argv[]) {
         free(matching);
         return EXIT_FAILURE;
     }
-    
+    /*
     print_timestamp("Starting score calculation");
     fprintf(stdout, "Processing graphs with:\n");
     fprintf(stdout, "  Graph 1: %zu vertices and %zu edges\n", g1->num_vertices, g1->num_edges);
     fprintf(stdout, "  Graph 2: %zu vertices and %zu edges\n", g2->num_vertices, g2->num_edges);
-    
+    */
     // Calculate and print score
     int score = calculate_score_sparse(g1, g2, matching);
     if (score >= 0) {
-        print_timestamp("Calculation complete");
+        //print_timestamp("Calculation complete");
         printf("%d\n", score);
     } else {
         fprintf(stdout, "Error calculating score\n");
@@ -693,12 +693,12 @@ int main(int argc, char* argv[]) {
     }
     
     // Cleanup
-    print_timestamp("Cleaning up");
+    //print_timestamp("Cleaning up");
     free_vertex_map(vmap);
     free_graph(g1);
     free_graph(g2);
     free(matching);
     
-    print_timestamp("Program completed successfully");
+    //print_timestamp("Program completed successfully");
     return EXIT_SUCCESS;
 }

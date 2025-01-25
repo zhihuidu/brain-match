@@ -189,7 +189,7 @@ Mapping* load_mapping(const char* filename) {
         }
     }
     
-    printf("Successfully loaded %d mappings from %s\n", m->num_mappings, filename);
+    //printf("Successfully loaded %d mappings from %s\n", m->num_mappings, filename);
     
     fclose(file);
     return m;
@@ -232,8 +232,8 @@ bool verify_mapping(Mapping* m) {
 
 // Function to analyze differences between two mappings
 void analyze_differences(Mapping* initial, Mapping* test) {
-    printf("\nAnalyzing differences between mappings:\n");
-    printf("----------------------------------------\n");
+    //printf("\nAnalyzing differences between mappings:\n");
+    //printf("----------------------------------------\n");
     
     int differences = 0;
     int missing_initial = 0;
@@ -253,23 +253,23 @@ void analyze_differences(Mapping* initial, Mapping* test) {
         }
         else if (initial->male_used[i] && test->male_used[i]) {
             if (initial->male_to_female[i] != test->male_to_female[i]) {
-                printf("Difference: %d (m%d) maps to %d (f%d) in initial, %d (f%d) in test\n",
-                       i, i, 
-                       initial->male_to_female[i], initial->male_to_female[i],
-                       test->male_to_female[i], test->male_to_female[i]);
+                //printf("Difference: %d (m%d) maps to %d (f%d) in initial, %d (f%d) in test\n",
+                //       i, i, 
+                //       initial->male_to_female[i], initial->male_to_female[i],
+                //       test->male_to_female[i], test->male_to_female[i]);
                 differences++;
             }
         }
     }
     
     // Print statistics
-    printf("\nSummary Statistics:\n");
-    printf("------------------\n");
-    printf("Initial mapping count: %d\n", initial->num_mappings);
-    printf("Test mapping count: %d\n", test->num_mappings);
-    printf("Number of differences: %d\n", differences);
-    printf("Vertices in initial but missing from test: %d\n", missing_test);
-    printf("Vertices in test but missing from initial: %d\n", missing_initial);
+    //printf("\nSummary Statistics:\n");
+    //printf("------------------\n");
+    //printf("Initial mapping count: %d\n", initial->num_mappings);
+    //printf("Test mapping count: %d\n", test->num_mappings);
+    //printf("Number of differences: %d\n", differences);
+    //printf("Vertices in initial but missing from test: %d\n", missing_test);
+    //printf("Vertices in test but missing from initial: %d\n", missing_initial);
     if (initial->num_mappings > 0) {
         printf("Percentage changed: %.2f%%\n", 
                (double)differences / initial->num_mappings * 100);
@@ -277,8 +277,8 @@ void analyze_differences(Mapping* initial, Mapping* test) {
     
     // Print histogram of changes
     if (differences > 0) {
-        printf("\nChange Distribution:\n");
-        printf("-------------------\n");
+        //printf("\nChange Distribution:\n");
+        //printf("-------------------\n");
         int ranges[10] = {0}; // 0-10%, 10-20%, etc.
         for (int i = 1; i <= NUM_NODES; i++) {
             if (initial->male_used[i] && test->male_used[i] &&
@@ -291,9 +291,9 @@ void analyze_differences(Mapping* initial, Mapping* test) {
         }
         
         for (int i = 0; i < 10; i++) {
-            printf("%3d-%3d%%: ", i*10, (i+1)*10);
-            for (int j = 0; j < ranges[i] * 50 / differences; j++) printf("*");
-            printf(" (%d)\n", ranges[i]);
+            //printf("%3d-%3d%%: ", i*10, (i+1)*10);
+            //for (int j = 0; j < ranges[i] * 50 / differences; j++) printf("*");
+            //printf(" (%d)\n", ranges[i]);
         }
     }
 }
@@ -305,14 +305,14 @@ int main(int argc, char* argv[]) {
     }
     
     // Load mappings
-    printf("Loading initial mapping from %s\n", argv[1]);
+    //printf("Loading initial mapping from %s\n", argv[1]);
     Mapping* initial = load_mapping(argv[1]);
     if (!initial) {
         fprintf(stderr, "Failed to load initial mapping\n");
         return 1;
     }
     
-    printf("Loading test mapping from %s\n", argv[2]);
+    //printf("Loading test mapping from %s\n", argv[2]);
     Mapping* test = load_mapping(argv[2]);
     if (!test) {
         fprintf(stderr, "Failed to load test mapping\n");
@@ -321,13 +321,13 @@ int main(int argc, char* argv[]) {
     }
     
     // Verify both mappings are valid
-    printf("\nVerifying initial mapping...\n");
+    //printf("\nVerifying initial mapping...\n");
     bool initial_valid = verify_mapping(initial);
-    printf("Initial mapping is %s\n", initial_valid ? "valid" : "invalid");
+    //printf("Initial mapping is %s\n", initial_valid ? "valid" : "invalid");
     
-    printf("\nVerifying test mapping...\n");
+    //printf("\nVerifying test mapping...\n");
     bool test_valid = verify_mapping(test);
-    printf("Test mapping is %s\n", test_valid ? "valid" : "invalid");
+    //printf("Test mapping is %s\n", test_valid ? "valid" : "invalid");
     
     // If both are valid, analyze differences
     if (initial_valid && test_valid) {
