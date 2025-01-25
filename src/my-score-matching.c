@@ -89,25 +89,25 @@ void print_timestamp(const char* message) {
     time(&now);
     char* time_str = ctime(&now);
     time_str[strlen(time_str) - 1] = '\0';
-    fprintf(stdout, "[%s] %s\n", time_str, message);
+    //fprintf(stdout, "[%s] %s\n", time_str, message);
 }
 
 void print_progress(size_t current, size_t total, const char* task) {
     if (total == 0) return;
     float percentage = (float)current * 100 / total;
-    fprintf(stdout, "\r%s: %.1f%% (%zu/%zu)", task, percentage, current, total);
+    //fprintf(stdout, "\r%s: %.1f%% (%zu/%zu)", task, percentage, current, total);
     if (current == total) fprintf(stdout, "\n");
     fflush(stdout);
 }
 
 void print_memory_usage(const Graph* g1, const Graph* g2, const VertexMap* vmap, const char* stage) {
-    fprintf(stdout, "\nMemory usage after %s:\n", stage);
-    fprintf(stdout, "  Graph 1: %zu vertices, %zu edges\n", 
-            g1 ? g1->num_vertices : 0, g1 ? g1->num_edges : 0);
-    fprintf(stdout, "  Graph 2: %zu vertices, %zu edges\n", 
-            g2 ? g2->num_vertices : 0, g2 ? g2->num_edges : 0);
-    fprintf(stdout, "  Vertex map: %zu vertices mapped\n\n", 
-            vmap ? vmap->count : 0);
+    //fprintf(stdout, "\nMemory usage after %s:\n", stage);
+    //fprintf(stdout, "  Graph 1: %zu vertices, %zu edges\n", 
+    //        g1 ? g1->num_vertices : 0, g1 ? g1->num_edges : 0);
+    //fprintf(stdout, "  Graph 2: %zu vertices, %zu edges\n", 
+    //        g2 ? g2->num_vertices : 0, g2 ? g2->num_edges : 0);
+    //fprintf(stdout, "  Vertex map: %zu vertices mapped\n\n", 
+    //        vmap ? vmap->count : 0);
 }
 
 // Hash function implementation
@@ -433,7 +433,7 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
         
         // Read until commas for both vertex IDs
         if (sscanf(line, "%[^,],%[^,],%d", src_str, tgt_str, &weight) != 3) {
-            fprintf(stdout, "Malformed line (skipping): %s", line);
+            //fprintf(stdout, "Malformed line (skipping): %s", line);
             continue;
         }
         
@@ -442,7 +442,7 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
         int tgt = parse_vertex_id(tgt_str);
         
         if (src < 0 || tgt < 0) {
-            fprintf(stdout, "Invalid vertex IDs (skipping): %s,%s\n", src_str, tgt_str);
+            //fprintf(stdout, "Invalid vertex IDs (skipping): %s,%s\n", src_str, tgt_str);
             continue;
         }
         
@@ -477,8 +477,8 @@ int load_graph_sparse(const char* filename, Graph* graph, VertexMap* vmap) {
         if (add_edge(graph, src_idx, tgt_idx, weight) == SUCCESS) {
             edge_count++;
         } else {
-            fprintf(stdout, "Failed to add edge: %d -> %d (weight: %d)\n", 
-                    src, tgt, weight);
+            //fprintf(stdout, "Failed to add edge: %d -> %d (weight: %d)\n", 
+            //        src, tgt, weight);
         }
     }
     
@@ -536,8 +536,8 @@ int load_matching(const char* filename, VertexMap* vmap, int* matching, size_t m
         int id2 = parse_vertex_id(id2_str);
         
         if (id1 < 0 || id2 < 0) {
-            fprintf(stdout, "Invalid vertex IDs in line '%s': '%s','%s' parsed as %d,%d\n", 
-                    line, id1_str, id2_str, id1, id2);
+            //fprintf(stdout, "Invalid vertex IDs in line '%s': '%s','%s' parsed as %d,%d\n", 
+            //        line, id1_str, id2_str, id1, id2);
             continue;
         }
         
@@ -672,12 +672,12 @@ int main(int argc, char* argv[]) {
         free(matching);
         return EXIT_FAILURE;
     }
-    /*
-    print_timestamp("Starting score calculation");
-    fprintf(stdout, "Processing graphs with:\n");
-    fprintf(stdout, "  Graph 1: %zu vertices and %zu edges\n", g1->num_vertices, g1->num_edges);
-    fprintf(stdout, "  Graph 2: %zu vertices and %zu edges\n", g2->num_vertices, g2->num_edges);
-    */
+    
+    //print_timestamp("Starting score calculation");
+    //fprintf(stdout, "Processing graphs with:\n");
+    //fprintf(stdout, "  Graph 1: %zu vertices and %zu edges\n", g1->num_vertices, g1->num_edges);
+    //fprintf(stdout, "  Graph 2: %zu vertices and %zu edges\n", g2->num_vertices, g2->num_edges);
+    
     // Calculate and print score
     int score = calculate_score_sparse(g1, g2, matching);
     if (score >= 0) {
